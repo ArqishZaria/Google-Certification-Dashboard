@@ -1,0 +1,30 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}GCC Dashboard{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'main/css/dashboard.css' %}">
+</head><body>
+<div class="topbar">
+  <div class="brand">GCC<small>Google Career Certificates - Dashboard</small></div>
+  {% if user.is_authenticated %}
+  <nav class="nav">
+    <a href="{% url 'dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}on{% endif %}">Dashboard</a>
+    <a href="{% url 'participants' %}" class="{% if 'participant' in request.resolver_match.url_name %}on{% endif %}">Participants</a>
+    <a href="{% url 'followup' %}" class="{% if request.resolver_match.url_name == 'followup' %}on{% endif %}">Follow-up lists</a>
+    <a href="{% url 'reports' %}" class="{% if 'report' in request.resolver_match.url_name %}on{% endif %}">Reports</a>
+    <a href="{% url 'methodology' %}">Methodology</a>
+    {% if is_national %}<a href="{% url 'data_quality' %}">Data quality</a>{% endif %}
+    {% if can_import %}<a href="{% url 'import_data' %}">Import data</a><a href="/admin/">Admin</a>{% endif %}
+  </nav>
+  <div class="who">{{ user.get_username }}<br>{{ scope_label }}
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Log out</button></form></div>
+  {% endif %}
+</div>
+<div class="wrap">
+  {% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}
+  {% for a in data_alerts %}<div class="msg error"><b>Data warning:</b> {{ a }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+  <div class="footer">{% if as_of %}Coursera data snapshot: {{ as_of|date:"d M Y" }}. {% endif %}Definitions: see <a href="{% url 'methodology' %}">Methodology</a>.</div>
+</div>
+{% block scripts %}{% endblock %}
+</body></html>

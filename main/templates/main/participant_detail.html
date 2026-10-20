@@ -1,0 +1,26 @@
+{% extends "main/base.html" %}{% load gcc %}{% block title %}{{ p.name }}{% endblock %}
+{% block content %}<p><a href="{% url 'participants' %}">&larr; All participants</a></p>
+<h1>{{ p.name }} <span class="pill p-{{ p.status }}">{{ p.status|status_label }}</span></h1>
+<div class="grid g2">
+<div class="card"><h2>Profile</h2><dl class="kv">
+<dt>Region</dt><dd>{{ p.region.name|default:"-" }}</dd><dt>Local council</dt><dd>{{ p.local_council.name|default:"-" }}</dd><dt>Area</dt><dd>{{ p.area.name|default:"-" }}</dd>
+<dt>Email</dt><dd>{{ p.email|default:"-" }}</dd><dt>Phone</dt><dd>{{ p.phone|default:"-" }}</dd><dt>CNIC</dt><dd>{{ p.cnic|default:"-" }}</dd>
+<dt>Registration ID</dt><dd>{{ reg.form_id|default:"- (no registration record)" }}</dd><dt>Coursera ID (External ID)</dt><dd>{{ p.coursera_external_id|default:"-" }}</dd>
+<dt>Gender / age</dt><dd>{{ p.gender|default:"-" }} / {{ reg.age|default:"-" }}</dd><dt>Professional status</dt><dd>{{ p.prof_status }}</dd><dt>Qualification</dt><dd>{{ reg.education_level|default:"-" }}</dd>
+<dt>Income band</dt><dd>{{ p.income_band }}</dd><dt>Preferred certificate</dt><dd>{{ p.preferred_label|default:"-" }}</dd><dt>Shortlisted</dt><dd>{% if p.shortlisted %}Yes ({{ p.shortlist_sheet }}){% else %}No{% endif %}</dd></dl></div>
+<div class="card"><h2>Progress</h2><dl class="kv">
+<dt>Licence</dt><dd>{{ p.license_state|license_label }} ({{ p.license_count }} licence{{ p.license_count|pluralize }})</dd>
+<dt>Selected Professional Certificate</dt><dd>{{ p.pc_family|default:"-" }}</dd>
+<dt>Current progress (PC only)</dt><dd>{% if p.pc_progress is not None %}{{ p.pc_progress|floatformat:1 }}% <div class="bar" style="width:200px;display:inline-block"><i style="width:{{ p.pc_progress }}%"></i></div>{% else %}No Professional Certificate enrolled{% endif %}</dd>
+<dt>Certificate earned</dt><dd>{% if p.pc_completed %}Yes - {{ p.pc_completed_families|join:", " }} ({{ p.pc_completed_at|date:"d M Y" }}){% else %}No{% endif %}</dd>
+<dt>AI courses</dt><dd>{{ p.ai_enrolled }} enrolled / {{ p.ai_completed }} completed</dd><dt>Short courses</dt><dd>{{ p.short_enrolled }} enrolled / {{ p.short_completed }} completed</dd>
+<dt>Individual courses</dt><dd>{{ p.courses_enrolled }} enrolled / {{ p.courses_completed }} completed</dd><dt>Learning hours</dt><dd>{{ p.learning_hours|floatformat:1 }}</dd>
+<dt>Last activity</dt><dd>{{ p.last_activity|date:"d M Y H:i"|default:"-" }}{% if p.days_inactive is not None %} ({{ p.days_inactive }} days before snapshot){% endif %}</dd></dl></div></div>
+<div class="card"><h2>Licences</h2><table><tr><th>Email</th><th>Coursera account</th><th>Programme</th><th>State</th><th>Invited</th><th>Joined</th><th>Matched by</th></tr>
+{% for l in licenses %}<tr><td>{{ l.email }}</td><td>{{ l.account }}</td><td>{{ l.program_name }}</td><td>{{ l.member_state }}</td><td>{{ l.invited_at|date:"d M Y" }}</td><td>{{ l.joined_at|date:"d M Y"|default:"-" }}</td><td>{{ l.match_method }}</td></tr>{% empty %}<tr><td colspan="7">No Coursera licence found.</td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Specializations</h2><table><tr><th>Specialization</th><th>Type</th><th class="n">Courses done</th><th class="n">Progress %</th><th>Completed</th><th>Certificate</th></tr>
+{% for s in specs %}<tr><td>{{ s.specialization.name }}</td><td>{{ s.specialization.category|category_label }}</td><td class="n">{{ s.completed_courses }}/{{ s.total_courses }}</td><td class="n">{{ s.progress_pct|floatformat:0 }}</td><td>{% if s.completed %}Yes ({{ s.completed_at|date:"d M Y" }}){% else %}No{% endif %}</td><td>{% if s.certificate_url|slice:":8" == "https://" %}<a href="{{ s.certificate_url }}" rel="noopener noreferrer" target="_blank">View</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="6">None</td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Courses</h2><div class="tscroll"><table><tr><th>Course</th><th class="n">Progress %</th><th>Completed</th><th>Last activity</th></tr>
+{% for c in courses %}<tr><td>{{ c.name }}</td><td class="n">{{ c.progress|floatformat:0 }}</td><td>{% if c.completed %}Yes{% else %}No{% endif %}</td><td>{{ c.last_activity_at|date:"d M Y"|default:"-" }}</td></tr>{% empty %}<tr><td colspan="4">None</td></tr>{% endfor %}</table></div></div>
+{% if is_national and issues %}<div class="card"><h2>Data-quality flags</h2>{% for i in issues %}<p><span class="pill s-{{ i.severity }}">{{ i.severity }}</span> {{ i.message }}</p>{% endfor %}</div>{% endif %}
+{% endblock %}

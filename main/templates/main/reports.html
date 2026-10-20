@@ -1,0 +1,8 @@
+{% extends "main/base.html" %}{% block title %}Reports{% endblock %}
+{% block content %}<h1>Reports <span class="note">- {{ scope_label }}</span></h1><div class="sub">Every report respects your access level and the region / council filter below. Formats: Excel, PDF, CSV.</div>
+{% include "main/_filters.html" %}
+<div class="card"><table><tr><th>Report</th><th>Contents</th><th>Preview</th><th>Download</th></tr>
+{% for slug, title, desc in report_list %}<tr><td><b>{{ title }}</b></td><td>{{ desc }}</td><td><a href="{% url 'report_view' slug %}?{{ query }}">View</a></td>
+<td><a class="btn sm" href="{% url 'report_download' slug 'xlsx' %}?{{ query }}">Excel</a> <a class="btn sm alt" href="{% url 'report_download' slug 'pdf' %}?{{ query }}">PDF</a> <a class="btn sm alt" href="{% url 'report_download' slug 'csv' %}?{{ query }}">CSV</a></td></tr>{% endfor %}</table></div>
+<div class="card"><h2>Follow-up exports</h2>{% for k, label in followups %}<p>{{ label }} &nbsp;
+<a class="btn sm" href="{% url 'report_download' 'followup-'|add:k 'xlsx' %}?{{ query }}">Excel</a> <a class="btn sm alt" href="{% url 'report_download' 'followup-'|add:k 'csv' %}?{{ query }}">CSV</a> <a class="btn sm alt" href="{% url 'report_download' 'followup-'|add:k 'pdf' %}?{{ query }}">PDF</a></p>{% endfor %}</div>{% endblock %}

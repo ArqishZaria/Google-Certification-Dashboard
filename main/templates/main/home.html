@@ -30,6 +30,9 @@
             font-size: 0.95rem;
             letter-spacing: 2px;
         }
+        .staff { position: fixed; bottom: 16px; right: 20px; font-size: 0.8rem; }
+        .staff a { color: #8f96b8; text-decoration: none; }
+        .staff a:hover { color: #f0a500; }
     </style>
 </head>
 <body>
@@ -40,5 +43,6 @@
         <p>Stay tuned!</p>
         <div class="badge">⏳ COMING SOON</div>
     </div>
+    <div class="staff"><a href="{% url 'dashboard' %}">Programme dashboard (staff) &rarr;</a></div>
 </body>
 </html>

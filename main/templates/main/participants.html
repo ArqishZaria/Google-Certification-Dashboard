@@ -1,0 +1,30 @@
+{% extends "main/base.html" %}{% load gcc %}{% block title %}Participants{% endblock %}
+{% block content %}<h1>Participant tracking <span class="note">- {{ scope_label }}</span></h1>
+<div class="sub">Search by name, email, CNIC, phone, registration ID or Coursera ID. {{ total|fmt_num }} participant{{ total|pluralize }} match.</div>
+<form method="get" class="filters">
+  <div><label>Search</label><input type="search" name="q" value="{{ g.q }}" placeholder="name / email / CNIC / phone / reg. ID" style="width:240px"></div>
+  {% if is_national %}<div><label>Region</label><select name="region" onchange="var f=this.form;if(f.council)f.council.value='';if(f.area)f.area.value='';f.submit()"><option value="">All</option>{% for r in filter_regions %}<option value="{{ r.name }}" {% if r.name == sel_region %}selected{% endif %}>{{ r.name }}</option>{% endfor %}</select></div>{% endif %}
+  <div><label>Local council</label><select name="council" onchange="var f=this.form;if(f.area)f.area.value='';f.submit()"><option value="">All</option>{% for c in filter_councils %}<option value="{{ c.id }}" {% if c.id|stringformat:"s" == sel_council %}selected{% endif %}>{{ c.name }} ({{ c.region.name }})</option>{% endfor %}</select></div>
+  {% if filter_areas %}<div><label>Area</label><select name="area"><option value="">All</option>{% for a in filter_areas %}<option value="{{ a.id }}" {% if a.id|stringformat:"s" == sel_area %}selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></div>{% endif %}
+  <div><label>Licence programme</label><select name="programme"><option value="">All</option><option value="regional" {% if sel_programme == 'regional' %}selected{% endif %}>Regional programmes</option><option value="national" {% if sel_programme == 'national' %}selected{% endif %}>National Council staff</option></select></div>
+  <div><label>Gender</label><select name="gender"><option value="">All</option><option {% if g.gender == 'Male' %}selected{% endif %}>Male</option><option {% if g.gender == 'Female' %}selected{% endif %}>Female</option></select></div>
+  <div><label>Status</label><select name="status"><option value="">All</option>{% for k, l in status_choices %}<option value="{{ k }}" {% if g.status == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label>Course (any)</label><select name="course"><option value="">All</option>{% for f in all_families %}<option {% if g.course == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></div>
+  <div><label>Professional Certificate</label><select name="pc"><option value="">All</option>{% for f in pc_families %}<option {% if g.pc == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></div>
+  <div><label>AI courses</label><select name="ai"><option value="">All</option><option value="enrolled" {% if g.ai == 'enrolled' %}selected{% endif %}>Enrolled</option><option value="completed" {% if g.ai == 'completed' %}selected{% endif %}>Completed</option><option value="none" {% if g.ai == 'none' %}selected{% endif %}>None</option></select></div>
+  <div><label>PC progress</label><select name="band"><option value="">All</option>{% for b in band_choices %}<option {% if g.band == b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select></div>
+  <div><label>Activity</label><select name="activity"><option value="">All</option><option value="ACTIVE" {% if g.activity == 'ACTIVE' %}selected{% endif %}>Active</option><option value="INACTIVE" {% if g.activity == 'INACTIVE' %}selected{% endif %}>Inactive</option><option value="NOT_STARTED" {% if g.activity == 'NOT_STARTED' %}selected{% endif %}>Not started</option></select></div>
+  <div><label>Date field</label><select name="date_type"><option value="">-</option>{% for k, l in date_types %}<option value="{{ k }}" {% if g.date_type == k %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div><label>From</label><input type="date" name="date_from" value="{{ g.date_from }}"></div><div><label>To</label><input type="date" name="date_to" value="{{ g.date_to }}"></div>
+  <div><button class="btn" type="submit">Search</button> <a class="btn alt" href="?">Reset</a></div>
+</form>
+<div class="card"><div class="tscroll"><table>
+<tr><th>Name</th><th>Region</th><th>Local council</th><th>Area</th><th>Licence</th><th>Status</th><th>Certificate</th><th class="n">PC %</th><th class="n">AI done</th><th class="n">Courses done</th><th>Last activity</th></tr>
+{% for p in page %}<tr><td><a href="{% url 'participant_detail' p.public_id %}">{{ p.name }}</a><br><span class="note">{{ p.email|default:"" }}</span></td><td>{{ p.region.name|default:"-" }}</td><td>{{ p.local_council.name|default:"-" }}</td><td>{{ p.area.name|default:"-" }}</td>
+<td>{{ p.license_state|license_label }}</td><td><span class="pill p-{{ p.status }}">{{ p.status|status_label }}</span></td><td>{{ p.pc_family|default:"-" }}</td>
+<td class="n">{% if p.pc_progress is not None %}{{ p.pc_progress|floatformat:0 }}{% else %}-{% endif %}</td><td class="n">{{ p.ai_completed }}</td><td class="n">{{ p.courses_completed }}</td><td>{{ p.last_activity|date:"d M Y"|default:"-" }}</td></tr>
+{% empty %}<tr><td colspan="11">No participants match.</td></tr>{% endfor %}</table></div>
+<p class="pager">{% if page.has_previous %}<a href="?{{ qs_keep }}&page={{ page.previous_page_number }}">&larr; Previous</a>{% endif %}
+<span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?{{ qs_keep }}&page={{ page.next_page_number }}">Next &rarr;</a>{% endif %}
+&nbsp; <a class="btn sm alt" href="{% url 'report_download' 'participant' 'xlsx' %}?{{ query }}">Download all in scope (Excel)</a></p></div>
+{% endblock %}

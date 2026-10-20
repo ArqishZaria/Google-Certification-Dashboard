@@ -1,0 +1,9 @@
+{% extends "main/base.html" %}{% load gcc %}{% block title %}Follow-up lists{% endblock %}
+{% block content %}<h1>Follow-up lists <span class="note">- {{ scope_label }}</span></h1><div class="sub">Ready-made call lists for regional and local chairs. Download any list for follow-up.</div>
+{% include "main/_filters.html" %}
+<div class="card">{% for k, label, n in counts %}<a class="chip" style="{% if k == key %}background:var(--navy2);color:#fff{% endif %}" href="?list={{ k }}&{{ query }}">{{ label }} ({{ n }})</a>{% endfor %}</div>
+<div class="card"><h2>{{ title }} - {{ total }}</h2>
+<p><a class="btn sm" href="{% url 'report_download' 'followup-'|add:key 'xlsx' %}?{{ query }}">Excel</a> <a class="btn sm alt" href="{% url 'report_download' 'followup-'|add:key 'csv' %}?{{ query }}">CSV</a> <a class="btn sm alt" href="{% url 'report_download' 'followup-'|add:key 'pdf' %}?{{ query }}">PDF</a></p>
+<div class="tscroll"><table><tr><th>Name</th><th>Phone</th><th>Region</th><th>Local council</th><th>Area</th><th>Status</th><th>Certificate</th><th class="n">PC %</th><th class="n">Days idle</th></tr>
+{% for p in rows %}<tr><td><a href="{% url 'participant_detail' p.public_id %}">{{ p.name }}</a></td><td>{{ p.phone|default:"-" }}</td><td>{{ p.region }}</td><td>{{ p.local_council|default:"-" }}</td><td>{{ p.area|default:"-" }}</td><td><span class="pill p-{{ p.status }}">{{ p.status|status_label }}</span></td><td>{{ p.pc_family|default:"-" }}</td><td class="n">{% if p.pc_progress is not None %}{{ p.pc_progress|floatformat:0 }}{% else %}-{% endif %}</td><td class="n">{{ p.days_inactive|default_if_none:"-" }}</td></tr>{% empty %}<tr><td colspan="9">Nobody in this list.</td></tr>{% endfor %}</table></div>
+{% if total > rows|length %}<p class="note">Showing the first {{ rows|length }}; download for the complete list.</p>{% endif %}</div>{% endblock %}

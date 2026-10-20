@@ -1,0 +1,2 @@
+{% extends "main/base.html" %}{% block content %}<div class="card"><h1>No data loaded yet</h1>
+{% if can_import %}<p><a class="btn" href="{% url 'import_data' %}">Import the data files</a></p>{% else %}<p>The National Program Team has not imported any data yet.</p>{% endif %}</div>{% endblock %}

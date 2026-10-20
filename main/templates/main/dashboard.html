@@ -1,0 +1,132 @@
+{% extends "main/base.html" %}{% load static gcc %}
+{% block title %}Dashboard - {{ scope_label }}{% endblock %}
+{% block content %}
+<h1>{% if eff.level == 'national' and not sel_region and not sel_council %}National Dashboard{% else %}Dashboard{% endif %} <span class="note">- {{ scope_label }}{% if sel_region %} / {{ sel_region }}{% endif %}</span></h1>
+<div class="sub">Data as of {{ as_of|date:"d M Y" }} | {{ nrows|fmt_num }} participants in view | one participant = one licence; completion = at least one <b>Professional Certificate</b></div>
+{% include "main/_filters.html" %}
+
+<div class="kpis">
+  <div class="kpi"><div class="v">{{ k.registrations|fmt_num }}</div><div class="l">Total registrations</div></div>
+  <div class="kpi"><div class="v">{{ k.screened|fmt_num }}</div><div class="l">Screened (shortlisted)</div></div>
+  <div class="kpi"><div class="v">{{ k.licensed|fmt_num }}</div><div class="l">Licences issued</div><div class="n">{{ k.licensed_not_shortlisted }} outside shortlist | {{ k.national_staff }} National Council staff</div></div>
+  <div class="kpi good"><div class="v">{{ k.accepted|fmt_num }}</div><div class="l">Licences accepted</div><div class="n">{{ k.acceptance_rate }}% utilisation</div></div>
+  <div class="kpi warn"><div class="v">{{ k.pending|fmt_num }}</div><div class="l">Pending acceptance</div></div>
+  <div class="kpi"><div class="v">{{ k.active|fmt_num }}</div><div class="l">Active learners</div><div class="n">activity in last {{ inactivity_days }} days</div></div>
+  <div class="kpi bad"><div class="v">{{ k.inactive|fmt_num }}</div><div class="l">Inactive learners</div><div class="n">started, idle &gt; {{ inactivity_days }} days</div></div>
+  <div class="kpi warn"><div class="v">{{ k.not_started|fmt_num }}</div><div class="l">Accepted, not started</div></div>
+  <div class="kpi gold"><div class="v">{{ k.completed|fmt_num }}</div><div class="l">Professional Certificate completions</div></div>
+  <div class="kpi gold"><div class="v">{{ k.completion_rate }}%</div><div class="l">Completion rate</div><div class="n">completed &divide; accepted</div></div>
+  <div class="kpi"><div class="v">{{ k.avg_progress }}%</div><div class="l">Average PC progress</div><div class="n">{{ k.pc_enrolled|fmt_num }} enrolled in a PC</div></div>
+  <div class="kpi"><div class="v">{{ k.activation_rate }}%</div><div class="l">Activation rate</div><div class="n">started &divide; issued</div></div>
+  <div class="kpi"><div class="v">{{ k.ai_courses_completed|fmt_num }}</div><div class="l">AI courses completed</div><div class="n">{{ k.ai_learners_completed }} learners (not counted as completion)</div></div>
+  <div class="kpi"><div class="v">{{ k.courses_completed|fmt_num }}</div><div class="l">Individual courses completed</div><div class="n">{{ k.learning_hours|fmt_num }} learning hours</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card"><h2>Participant funnel</h2><div class="chart"><canvas id="c_funnel"></canvas></div>
+    <p class="note">"Licence issued" can exceed "Screened" when licences were issued to people who are not on the shortlist ({{ k.licensed_not_shortlisted }} here) - see the Data quality page.</p></div>
+  <div class="card"><h2>Where every participant stands today</h2><div class="chart"><canvas id="c_status"></canvas></div>
+    <p class="note">Each participant appears in exactly one slice.</p></div>
+</div>
+
+<div class="card"><h2>{{ group_title }} performance &amp; ranking</h2>
+  <p class="note">Ranked by completion rate (completed &divide; accepted), then average Professional Certificate progress. Ties share a rank. Groups with fewer than 10 accepted licences are marked * (small base).</p>
+  {% if pay.top %}<p>
+    <b>Top:</b> {% for r in pay.top %}<span class="chip">{{ r.rank }}. {{ r.name }} - {{ r.completion_rate }}%</span>{% endfor %}
+    {% if pay.bottom %}&nbsp; <b>Lowest:</b> {% for r in pay.bottom %}<span class="chip">{{ r.name }} - {{ r.completion_rate }}%</span>{% endfor %}{% endif %}</p>{% endif %}
+  <div class="tscroll"><table>
+    <tr><th>#</th><th>{{ group_title }}</th><th class="n">Reg.</th><th class="n">Screened</th><th class="n">Licensed</th><th class="n">Accepted</th><th class="n">Pending</th><th class="n">Started</th><th class="n">Not started</th><th class="n">In progress</th><th class="n">Active</th><th class="n">Inactive</th><th class="n">Completed</th><th class="n">Compl. %</th><th>Compl. bar</th><th class="n">Avg prog %</th><th class="n">Accept %</th></tr>
+    {% for r in pay.groups %}<tr>
+      <td>{% if r.rank %}<span class="rank {% if r.rank == 1 %}r1{% endif %}">{{ r.rank }}</span>{% endif %}</td>
+      <td>{{ r.name }}{% if r.accepted < 10 and r.accepted > 0 %} *{% endif %}</td>
+      <td class="n">{{ r.registrations }}</td><td class="n">{{ r.screened }}</td><td class="n">{{ r.licensed }}</td><td class="n">{{ r.accepted }}</td><td class="n">{{ r.pending }}</td>
+      <td class="n">{{ r.started }}</td><td class="n">{{ r.not_started }}</td><td class="n">{{ r.in_progress }}</td><td class="n">{{ r.active }}</td><td class="n">{{ r.inactive }}</td><td class="n"><b>{{ r.completed }}</b></td>
+      <td class="n">{{ r.completion_rate }}</td><td><div class="bar"><i style="width:{{ r.completion_rate }}%"></i></div></td>
+      <td class="n">{{ r.avg_progress }}</td><td class="n">{{ r.acceptance_rate }}</td></tr>{% endfor %}
+    <tr style="font-weight:700;background:#f0f4f9"><td></td><td>Total</td><td class="n">{{ k.registrations }}</td><td class="n">{{ k.screened }}</td><td class="n">{{ k.licensed }}</td><td class="n">{{ k.accepted }}</td><td class="n">{{ k.pending }}</td><td class="n">{{ k.started }}</td><td class="n">{{ k.not_started }}</td><td class="n">{{ k.in_progress }}</td><td class="n">{{ k.active }}</td><td class="n">{{ k.inactive }}</td><td class="n">{{ k.completed }}</td><td class="n">{{ k.completion_rate }}</td><td></td><td class="n">{{ k.avg_progress }}</td><td class="n">{{ k.acceptance_rate }}</td></tr>
+  </table></div></div>
+
+<div class="grid g2">
+  <div class="card"><h2>Licences issued vs accepted vs started - by {{ group_title|lower }}</h2><div class="chart tall"><canvas id="c_groups_lic"></canvas></div></div>
+  <div class="card"><h2>Not yet learning - by {{ group_title|lower }}</h2><div class="chart tall"><canvas id="c_groups_notstarted"></canvas></div></div>
+  <div class="card"><h2>Completion % and average progress - by {{ group_title|lower }}</h2><div class="chart tall"><canvas id="c_groups_rate"></canvas></div></div>
+  <div class="card"><h2>Progress bands (Professional Certificate) - by {{ group_title|lower }}</h2><div class="chart tall"><canvas id="c_group_bands"></canvas></div></div>
+</div>
+
+<div class="grid g2">
+  <div class="card"><h2>Progress distribution (accepted, enrolled in a PC)</h2><div class="chart short"><canvas id="c_progress"></canvas></div>
+    <p class="note">Below 20% includes {{ pay.zero_progress|fmt_num }} learners still on 0%. BRD bands include their lower bound (20-49% = 20.0 up to 49.9).</p></div>
+  <div class="card"><h2>Specializations enrolled per learner</h2><div class="chart short"><canvas id="c_cpl"></canvas></div></div>
+</div>
+
+<div class="card"><h2>Programme mix</h2>
+  <div class="grid g3">
+  {% for cat, c in pay.category_summary.items %}<div class="kpi {% if cat == 'PC' %}gold{% endif %}"><div class="v">{{ c.completions }}</div><div class="l">{{ c.label }} completions</div><div class="n">{{ c.enrolled_people }} people / {{ c.enrolments }} enrolments</div></div>{% endfor %}</div></div>
+
+<div class="grid g2">
+  <div class="card"><h2>Most popular courses &amp; completion</h2><div class="chart tall"><canvas id="c_pop"></canvas></div></div>
+  <div class="card"><h2>Course-wise progress distribution</h2><div class="chart tall"><canvas id="c_course_bands"></canvas></div></div>
+</div>
+<div class="card"><h2>Course table</h2><div class="tscroll"><table>
+  <tr><th>Course (family)</th><th>Type</th><th class="n">Enrolled</th><th class="n">Completed</th><th class="n">Compl. %</th><th class="n">Avg progress %</th></tr>
+  {% for r in pay.popularity %}<tr><td>{{ r.family }}</td><td>{{ r.category|category_label }}</td><td class="n">{{ r.enrolled }}</td><td class="n">{{ r.completed }}</td><td class="n">{{ r.completion_rate }}</td><td class="n">{{ r.avg_progress }}</td></tr>{% endfor %}
+</table></div></div>
+
+{% if heat_rows %}<div class="card"><h2>Heat map - {{ group_title|lower }} &times; course (participants enrolled)</h2><div class="tscroll"><table class="heat">
+  <tr><th>{{ group_title }}</th>{% for f in heat.families %}<th>{{ f }}</th>{% endfor %}</tr>
+  {% for g, row in heat_rows %}<tr><td>{{ g }}</td>{% for c in row %}<td style="{{ c.enrolled|heat:heat.max }}" title="{{ c.completed }} completed">{% if c.enrolled %}{{ c.enrolled }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</table></div></div>{% endif %}
+
+<h2 style="margin-top:22px">Who the learners are</h2>
+<div class="grid g2">
+  <div class="card"><h2>Gender</h2><div class="chart short"><canvas id="c_gender"></canvas></div></div>
+  <div class="card"><h2>Professional status</h2><div class="chart short"><canvas id="c_prof"></canvas></div></div>
+  <div class="card"><h2>Family income band</h2><div class="chart tall"><canvas id="c_income"></canvas></div></div>
+  <div class="card"><h2>Age bracket</h2><div class="chart tall"><canvas id="c_age"></canvas></div></div>
+  <div class="card" style="grid-column:1/-1"><h2>Qualification &times; professional status (licensed participants)</h2><div class="chart"><canvas id="c_edu"></canvas></div></div>
+</div>
+<p class="note">Stacked bars: green = started learning, amber = accepted but not started, grey = licence pending acceptance.</p>
+
+<h2 style="margin-top:22px">Growth over time</h2>
+<div class="grid g2">
+  <div class="card"><h2>Weekly activity</h2><div class="chart"><canvas id="c_weekly"></canvas></div></div>
+  <div class="card"><h2>Monthly growth</h2><div class="chart"><canvas id="c_monthly"></canvas></div></div>
+</div>
+<div class="card"><div class="tscroll"><table><tr><th>Month</th><th class="n">Registrations</th><th class="n">Licences issued</th><th class="n">MoM</th><th class="n">Accepted</th><th class="n">MoM</th><th class="n">Started</th><th class="n">MoM</th><th class="n">PC completed</th><th class="n">MoM</th></tr>
+  {% for m in pay.monthly %}<tr><td>{{ m.month }}</td><td class="n">{{ m.registrations }}</td><td class="n">{{ m.licensed }}</td><td class="n">{{ m.licensed_growth|default_if_none:"-" }}{% if m.licensed_growth is not None %}%{% endif %}</td>
+  <td class="n">{{ m.accepted }}</td><td class="n">{{ m.accepted_growth|default_if_none:"-" }}{% if m.accepted_growth is not None %}%{% endif %}</td>
+  <td class="n">{{ m.started }}</td><td class="n">{{ m.started_growth|default_if_none:"-" }}{% if m.started_growth is not None %}%{% endif %}</td>
+  <td class="n">{{ m.completed }}</td><td class="n">{{ m.completed_growth|default_if_none:"-" }}{% if m.completed_growth is not None %}%{% endif %}</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="grid g2">
+  <div class="card"><h2>Leaderboard - top learners</h2><div class="tscroll"><table><tr><th>#</th><th>Name</th><th>{{ group_title }}</th><th>Certificate</th><th class="n">Progress %</th><th class="n">Courses done</th></tr>
+    {% for p in pay.leaderboard %}<tr><td>{{ forloop.counter }}</td><td><a href="{% url 'participant_detail' p.public_id %}">{{ p.name }}</a></td><td>{% if group_title == 'Region' %}{{ p.region }}{% elif group_title == 'Area (Jamatkhana)' %}{{ p.area }}{% else %}{{ p.local_council }}{% endif %}</td><td>{{ p.pc_family|default:"-" }}</td><td class="n">{{ p.pc_progress|default_if_none:"-" }}</td><td class="n">{{ p.courses_completed }}</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="card"><h2>Inactive learners - longest idle</h2><div class="tscroll"><table><tr><th>Name</th><th>Region</th><th>Certificate</th><th class="n">Progress %</th><th class="n">Days idle</th></tr>
+    {% for p in pay.most_inactive %}<tr><td><a href="{% url 'participant_detail' p.public_id %}">{{ p.name }}</a></td><td>{{ p.region }}</td><td>{{ p.pc_family|default:"-" }}</td><td class="n">{{ p.pc_progress|default_if_none:"-" }}</td><td class="n">{{ p.days_inactive }}</td></tr>{% endfor %}
+  </table></div><p><a href="{% url 'followup' %}?list=inactive&{{ query }}">Full inactive list &rarr;</a></p></div>
+</div>
+<div class="card" id="excel-view"><h2>Excel-compatible view (2025 workbook definitions)</h2>
+  <p class="note">The same cards as the previous Excel dashboard, computed with <b>its</b> rules so the two can be compared: "started" = enrolled in a <i>specialization</i>; "completed" = <i>any</i> specialization (AI Essentials, Prompting Essentials etc. included); each candidate is placed <b>once</b> by their most advanced specialization; the course columns count every specialization enrolment. The BRD completion figures above count Professional Certificates only.</p>
+  <div class="kpis">
+    <div class="kpi"><div class="v">{{ pay.legacy.invited|fmt_num }}</div><div class="l">Candidates invited</div><div class="n">M {{ pay.legacy.gender.Male.invited }} / F {{ pay.legacy.gender.Female.invited }}</div></div>
+    <div class="kpi"><div class="v">{{ pay.legacy.started|fmt_num }}</div><div class="l">Candidates started any one course</div><div class="n">M {{ pay.legacy.gender.Male.started }} / F {{ pay.legacy.gender.Female.started }}</div></div>
+    <div class="kpi"><div class="v">{{ pay.legacy.courses_registered|fmt_num }}</div><div class="l">No. of courses registered</div></div>
+    <div class="kpi warn"><div class="v">{{ pay.legacy.not_started|fmt_num }}</div><div class="l">Candidates not started any course</div><div class="n">M {{ pay.legacy.gender.Male.not_started }} / F {{ pay.legacy.gender.Female.not_started }}</div></div>
+    <div class="kpi gold"><div class="v">{{ pay.legacy.completed_candidates|fmt_num }}</div><div class="l">Candidates completed 1 course</div></div>
+    <div class="kpi gold"><div class="v">{{ pay.legacy.courses_completed|fmt_num }}</div><div class="l">Total courses completed</div></div>
+  </div>
+  <div class="tscroll"><table><tr><th>Band (by most advanced course)</th><th class="n">No. of candidates</th><th class="n">No. of courses</th></tr>
+    <tr><td>On 100% completion</td><td class="n">{{ pay.legacy.completed_candidates }}</td><td class="n">{{ pay.legacy.courses_completed }}</td></tr>
+    <tr><td>&gt; 50% completion</td><td class="n">{{ pay.legacy.gt50_candidates }}</td><td class="n">{{ pay.legacy.gt50_courses }}</td></tr>
+    <tr><td>&lt; 50% completion (above 0)</td><td class="n">{{ pay.legacy.lt50_candidates }}</td><td class="n">{{ pay.legacy.lt50_courses }}</td></tr>
+    <tr><td>On 0% completion</td><td class="n">{{ pay.legacy.zero_candidates }}</td><td class="n">{{ pay.legacy.zero_courses }}</td></tr></table></div>
+  <h3 style="margin-top:14px">By {{ group_title|lower }}</h3>
+  <div class="tscroll"><table><tr><th>{{ group_title }}</th><th class="n">Invited</th><th class="n">Started</th><th class="n">Not started</th><th class="n">Courses registered</th><th class="n">Candidates 100%</th><th class="n">Courses 100%</th><th class="n">Cand. &gt;50%</th><th class="n">Courses &gt;50%</th><th class="n">Cand. &lt;50%</th><th class="n">Courses &lt;50%</th><th class="n">Cand. 0%</th><th class="n">Courses 0%</th></tr>
+  {% for r in pay.legacy_groups %}<tr><td>{{ r.name }}</td><td class="n">{{ r.invited }}</td><td class="n">{{ r.started }}</td><td class="n">{{ r.not_started }}</td><td class="n">{{ r.courses_registered }}</td><td class="n">{{ r.completed_candidates }}</td><td class="n">{{ r.courses_completed }}</td><td class="n">{{ r.gt50_candidates }}</td><td class="n">{{ r.gt50_courses }}</td><td class="n">{{ r.lt50_candidates }}</td><td class="n">{{ r.lt50_courses }}</td><td class="n">{{ r.zero_candidates }}</td><td class="n">{{ r.zero_courses }}</td></tr>{% endfor %}</table></div>
+</div>
+
+{{ charts|json_script:"chart-data" }}
+{% endblock %}
+{% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script><script src="{% static 'main/js/dashboard.js' %}"></script>{% endblock %}

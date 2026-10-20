@@ -1,0 +1,21 @@
+<form method="get" class="filters">
+  {% if filter_regions|length > 1 or is_national %}
+  <div><label>Region</label><select name="region" onchange="var f=this.form;if(f.council)f.council.value='';if(f.area)f.area.value='';f.submit()">
+    <option value="">All regions</option>
+    {% for r in filter_regions %}<option value="{{ r.name }}" {% if r.name == sel_region %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+  </select></div>{% endif %}
+  <div><label>Local council</label><select name="council" onchange="var f=this.form;if(f.area)f.area.value='';f.submit()">
+    <option value="">All councils</option>
+    {% for c in filter_councils %}<option value="{{ c.id }}" {% if c.id|stringformat:"s" == sel_council %}selected{% endif %}>{{ c.name }} ({{ c.region.name }})</option>{% endfor %}
+  </select></div>
+  {% if filter_areas %}<div><label>Area</label><select name="area" onchange="this.form.submit()">
+    <option value="">All areas</option>
+    {% for a in filter_areas %}<option value="{{ a.id }}" {% if a.id|stringformat:"s" == sel_area %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+  </select></div>{% endif %}
+  <div><label>Licence programme</label><select name="programme" onchange="this.form.submit()">
+    <option value="">All participants</option>
+    <option value="regional" {% if sel_programme == 'regional' %}selected{% endif %}>Regional programmes only</option>
+    <option value="national" {% if sel_programme == 'national' %}selected{% endif %}>National Council staff only</option>
+  </select></div>
+  <div><button class="btn" type="submit">Apply</button> <a class="btn alt" href="?">Reset</a></div>
+</form>

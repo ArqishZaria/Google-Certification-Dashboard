@@ -1,0 +1,34 @@
+{% extends "main/base.html" %}{% block title %}Methodology{% endblock %}
+{% block content %}<h1>Methodology - how every number is calculated</h1>
+<div class="card"><h2>Data sources and how they are joined</h2><ol>
+<li><b>Registration master</b> (Google Form export) - the profile of every applicant.</li>
+<li><b>Final list</b> - the shortlisted candidates (screening). Linked to registration by <b>CNIC</b>, falling back to email. (Its "id" column is a serial number in most sheets, so it is never used as a key.)</li>
+<li><b>Coursera</b> (two enterprise accounts): Program Activity = licences (MEMBER = accepted, INVITED = pending); Specialisation Activity and Course Activity = learning progress.</li></ol>
+<p>A Coursera licence is attached to a person in this order: manual override &rarr; <b>email</b> &rarr; <b>CNIC</b> (Coursera "External ID") &rarr; registration CNIC/email. <b>Names are never used to merge people</b>; look-alikes are only suggested for review. Anything ambiguous appears on the Data quality page.</p></div>
+<div class="card"><h2>Business rules (from the BRD)</h2><ul>
+<li><b>One participant = one licence.</b> A person with two licences is counted once (flagged).</li>
+<li><b>Completed</b> = at least one <b>Professional Certificate</b> marked Completed by Coursera. AI Essentials, Prompting Essentials, Agile Essentials and other short courses never increase the completion count; they are reported separately.</li>
+<li><b>Progress %</b> is measured against the Professional Certificate only: completed courses &divide; courses in the certificate (100% once completed). With several certificates, the most advanced one is used. If two versions of the same specialization exist (e.g. 7- and 8-course editions) they are merged into one.</li>
+<li><b>Started</b> = enrolled in at least one specialization or course.</li>
+<li><b>Active learner</b> = started, not completed, activity within <b>{{ inactivity }}</b> days of the data snapshot date. <b>Inactive learner</b> = started, not completed, no activity for longer. <b>Not started</b> = licence accepted, nothing enrolled. Therefore <i>accepted = completed + active + inactive + not started</i>.</li>
+<li><b>Completion rate</b> = completed &divide; accepted licences. <b>Utilisation</b> = accepted &divide; issued. <b>Activation</b> = started &divide; issued.</li>
+<li>Monthly and weekly growth tables bucket dates in Pakistan time (UTC+5).</li>
+<li>Inactivity is measured against the <b>snapshot date of the Coursera export</b>, not today's date, so numbers do not drift between imports.</li>
+<li><b>Region / Local council / Area</b> = where the person <b>lives</b>, from the registration form ("Residing Region", "Current Local Council", "JK Attendance") - the same as the 2025 Excel and BRD s.5. National Council staff (Coursera programme "National Employee") are therefore counted in the region where they live; use the <i>Licence programme</i> filter to isolate them. Without a registration record the Coursera programme region is used. Local-council and Jamatkhana names repeat across regions, so they are always shown with their region / council.</li>
+<li><b>In progress</b> = started and not completed (= active + inactive).</li>
+</ul></div>
+<div class="card"><h2>Progress bands</h2>
+<p><b>BRD bands</b> (participant view; lower bound inclusive, so exactly 20% is "20-49%"): {% for b in bands %}<span class="chip">{{ b }}</span>{% endfor %}</p>
+<p><b>Excel-compatible bands</b> (course-wise charts; exactly as in the 2025 workbook, a value on the edge belongs to the LOWER band, so exactly 20% is "&lt;20%"): {% for b in fine %}<span class="chip">{{ b }}</span>{% endfor %}</p></div>
+<div class="card"><h2>How the numbers relate to the 2025 Excel dashboard</h2>
+<p>The engine was verified against the workbook: feeding the workbook's own data through the same code reproduces <b>all 18 national cards and all 99 per-region cards</b> (<code>python manage.py verify_excel_parity "&lt;workbook&gt;"</code>). The dashboard's main figures follow the BRD, which deliberately differs in these ways; the <i>Excel-compatible view</i> on the dashboard shows the old definitions side by side.</p>
+<table><tr><th>Topic</th><th>2025 Excel</th><th>This dashboard (BRD)</th></tr>
+<tr><td>Completion</td><td>Any specialization (AI Essentials, Prompting Essentials ... counted)</td><td>Only a <b>Professional Certificate</b> (Rule 3). AI / short courses reported separately.</td></tr>
+<tr><td>Progress %</td><td>Most advanced of any specialization</td><td>Professional Certificate only (Rule 4)</td></tr>
+<tr><td>Licence state</td><td>"Invited" = everyone, no accepted / pending split</td><td>Accepted (MEMBER) vs pending (INVITED) are separate</td></tr>
+<tr><td>Started</td><td>Has a specialization row</td><td>Has a specialization <i>or</i> an individual course</td></tr>
+<tr><td>Duplicate specialization versions</td><td>Each row counted</td><td>Merged into one enrolment per learner</td></tr>
+<tr><td>Candidate bands (&gt;50 / &lt;50 / 0%)</td><td>Each candidate placed by their LAST row in the sheet (arbitrary, depends on sort order)</td><td>Placed by their most advanced course (deterministic)</td></tr>
+<tr><td>Professional status</td><td>Student, Employed, Self Employed, Entrepreneur, Fresh Graduate, Unemployed</td><td>Student, Employed, Self Employed, Other income, Unemployed (the new form has no Entrepreneur / Fresh-graduate answer)</td></tr></table></div>
+<div class="card"><h2>Specialization catalogue</h2><p class="note">Edit in Admin &rarr; Specializations, then press Recalculate on the Data quality page.</p>
+<table><tr><th>Specialization</th><th>Family</th><th>Counts as</th><th>Confirmed</th></tr>{% for s in catalogue %}<tr><td>{{ s.name }}</td><td>{{ s.family }}</td><td>{{ s.get_category_display }}</td><td>{{ s.reviewed|yesno:"Yes,Needs review" }}</td></tr>{% endfor %}</table></div>{% endblock %}

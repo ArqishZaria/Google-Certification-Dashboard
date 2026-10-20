@@ -1,0 +1,18 @@
+{% extends "main/base.html" %}{% block title %}Data quality{% endblock %}
+{% block content %}<h1>Data quality &amp; reconciliation</h1>
+{% if imp %}<div class="sub">Last import {{ imp.created_at }} - data as of <b>{{ imp.as_of }}</b> - {{ imp.stats.registrations }} registrations, {{ imp.stats.participants_licensed }} licensed participants, {{ imp.stats.licenses }} Coursera licences, {{ imp.stats.spec_enrolments }} specialization enrolments ({{ imp.stats.spec_versions_merged }} duplicate versions merged), {{ imp.stats.course_enrolments }} course enrolments.</div>
+<div class="card"><h2>Reconciliation with Coursera's own totals</h2>
+{% if recon_bad %}<div class="msg error">{{ recon_bad|length }} check(s) do not match Coursera's summary. Investigate before trusting the numbers.</div>{% else %}<div class="msg success">Every figure we recompute from the raw rows matches Coursera's summary export.</div>{% endif %}
+<table><tr><th>Coursera account</th><th>Check</th><th class="n">Coursera says</th><th class="n">We compute</th><th></th></tr>
+{% for c in imp.recon %}<tr><td>{{ c.account }}</td><td>{{ c.label }}</td><td class="n">{{ c.expected|default_if_none:"-" }}</td><td class="n">{{ c.actual|default_if_none:"-" }}</td><td>{% if c.ok %}<span class="ok">&#10003;</span>{% elif c.ok is None %}-{% else %}<span class="bad">&#10007;</span>{% endif %}</td></tr>{% endfor %}</table>
+<p class="note">Note: "Started learning" on the dashboard also counts people enrolled in a specialization but with no individual course yet, so it can be slightly higher than Coursera's "Current learners".</p></div>
+<div class="card"><h2>Maintenance</h2>
+{% if can_import %}<form method="post" action="{% url 'recalculate' %}" style="display:inline">{% csrf_token %}<button class="btn" type="submit">Recalculate all participants</button></form> <a class="btn alt" href="{% url 'import_data' %}">Import new data</a>
+<p class="note">After changing a specialization's category in Admin (what counts as a Professional Certificate) press Recalculate - no re-upload needed.</p>{% endif %}</div>
+{% if unreviewed %}<div class="card"><h2>Specializations needing review ({{ unreviewed|length }})</h2><p class="note">New specializations are never counted as Professional Certificates until you confirm them in Admin &rarr; Specializations.</p>{% for s in unreviewed %}<span class="chip">{{ s.name }} ({{ s.category }})</span>{% endfor %}</div>{% endif %}
+<div class="card"><h2>Issues found ({{ issue_total }})</h2>
+<p><a class="chip" href="?">All</a>{% for sv, n in summary.items %}<a class="chip" href="?severity={{ sv }}">{{ sv }}: {{ n }}</a>{% endfor %}</p>
+<div class="tscroll"><table><tr><th>Severity</th><th>Code</th><th>Details</th><th>Participant</th></tr>
+{% for i in issues %}<tr><td><span class="pill s-{{ i.severity }}">{{ i.severity }}</span></td><td>{{ i.code }}</td><td>{{ i.message }}</td><td>{% if i.participant %}<a href="{% url 'participant_detail' i.participant.public_id %}">{{ i.participant.name }}</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="4">No issues.</td></tr>{% endfor %}</table></div>
+<p class="note">To fix an unmatched licence: Admin &rarr; Identity overrides &rarr; add (Coursera account, licence email, CNIC), then re-import. Names are never auto-matched.</p></div>
+{% else %}<div class="card">No import yet.</div>{% endif %}{% endblock %}

@@ -1,0 +1,5 @@
+{% extends "main/base.html" %}{% load gcc %}{% block title %}{{ title }}{% endblock %}
+{% block content %}<p><a href="{% url 'reports' %}">&larr; Reports</a></p><h1>{{ title }}</h1><div class="sub">{{ desc }} {{ total|fmt_num }} rows{% if total > 100 %} (first 100 shown){% endif %}.</div>
+<p><a class="btn" href="{% url 'report_download' slug 'xlsx' %}?{{ query }}">Excel</a> <a class="btn alt" href="{% url 'report_download' slug 'pdf' %}?{{ query }}">PDF</a> <a class="btn alt" href="{% url 'report_download' slug 'csv' %}?{{ query }}">CSV</a></p>
+<div class="card"><div class="tscroll"><table><tr>{% for c in cols %}<th>{{ c }}</th>{% endfor %}</tr>
+{% for r in rows %}<tr>{% for v in r %}<td>{% if v is not None %}{{ v }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</table></div></div>{% endblock %}

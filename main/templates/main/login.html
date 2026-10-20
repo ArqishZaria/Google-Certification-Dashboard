@@ -1,0 +1,5 @@
+{% extends "main/base.html" %}{% block title %}Sign in - GCC{% endblock %}
+{% block content %}<div class="card login"><h1>Sign in</h1><p class="sub">Google Career Certificates dashboard</p>
+{% if form.errors %}<div class="msg error">Incorrect username or password.</div>{% endif %}
+<form method="post">{% csrf_token %}<p><label>Username</label><br>{{ form.username }}</p><p><label>Password</label><br>{{ form.password }}</p>
+<input type="hidden" name="next" value="{{ next }}"><button class="btn" type="submit">Sign in</button></form></div>{% endblock %}

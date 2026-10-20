@@ -1,0 +1,14 @@
+{% extends "main/base.html" %}{% block title %}Import data{% endblock %}
+{% block content %}<h1>Import / refresh data</h1>
+<p class="sub">Upload all files in one go. File types are detected from their content, so the names don't matter. Each import <b>replaces</b> the previous snapshot completely (it is safe to re-run), and if anything fails nothing is changed.</p>
+<div class="card"><form method="post" enctype="multipart/form-data">{% csrf_token %}
+<p><b>Required</b></p><ul>
+<li>Registration master workbook (<code>Master sheet - GCC ....xlsx</code>)</li>
+<li>Final list workbook (<code>Final list - ....xlsx</code>)</li>
+<li>Coursera <b>Program Activity</b> CSV for each Coursera account</li></ul>
+<p><b>Recommended</b>: Specialisation Activity + Course Activity CSV for each account, and <b>Activity By Business Unit</b> (used to reconcile our numbers against Coursera's own totals). Other Coursera files are ignored safely.</p>
+<p><input type="file" name="files" multiple required accept=".xlsx,.csv"></p>
+<p class="note"><label><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than the previous import</label></p>
+<button class="btn" type="submit">Import</button></form></div>
+{% if imp %}<div class="card"><h2>Last import</h2><p>{{ imp.created_at }} - data as of <b>{{ imp.as_of }}</b></p><ul>{% for f in imp.files %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
+{% endblock %}
