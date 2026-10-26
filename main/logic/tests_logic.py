@@ -182,25 +182,6 @@ class DeriveTests(unittest.TestCase):
         self.assertEqual(sum(1 for p in parts), sum(M.Counter(p["status"] for p in parts).values()))
 
 
-class TimeBucketTests(unittest.TestCase):
-    def test_months_and_weeks_use_pakistan_time(self):
-        late_utc = datetime(2026, 8, 31, 22, 30, tzinfo=UTC)      # = 1 Sept 03:30 in Pakistan
-        self.assertEqual(M._month(late_utc), "2026-09")
-        self.assertEqual(M._month(datetime(2026, 8, 31, 18, 30, tzinfo=UTC)), "2026-08")
-        self.assertEqual(M._week(datetime(2026, 9, 6, 21, 0, tzinfo=UTC)), "2026-09-07")   # Sunday night UTC = Monday in Pakistan
-
-
-class RankTests(unittest.TestCase):
-    def test_dense_rank_and_ties(self):
-        rows = [{"name": "A", "accepted": 10, "completion_rate": 5.0, "avg_progress": 10.0},
-                {"name": "B", "accepted": 10, "completion_rate": 5.0, "avg_progress": 10.0},
-                {"name": "C", "accepted": 10, "completion_rate": 1.0, "avg_progress": 3.0},
-                {"name": "Z", "accepted": 0, "completion_rate": 0.0, "avg_progress": 0.0}]
-        M.rank_rows(rows)
-        ranks = {r["name"]: r["rank"] for r in rows}
-        self.assertEqual((ranks["A"], ranks["B"], ranks["C"], ranks["Z"]), (1, 1, 3, None))
-
-
 class LegacyViewTests(unittest.TestCase):
     """The Excel-compatible numbers must follow the 2025 workbook's definitions (verified 18/18 + 99/99 against it)."""
 
@@ -237,6 +218,25 @@ class LegacyViewTests(unittest.TestCase):
         c = self.part([spec("Cybersecurity", C.PC, 100, True)])
         k = M.kpis([a, b, c], 0)
         self.assertEqual((k["in_progress"], k["pc_in_progress"], k["completed"]), (2, 1, 1))
+
+
+class TimeBucketTests(unittest.TestCase):
+    def test_months_and_weeks_use_pakistan_time(self):
+        late_utc = datetime(2026, 8, 31, 22, 30, tzinfo=UTC)      # = 1 Sept 03:30 in Pakistan
+        self.assertEqual(M._month(late_utc), "2026-09")
+        self.assertEqual(M._month(datetime(2026, 8, 31, 18, 30, tzinfo=UTC)), "2026-08")
+        self.assertEqual(M._week(datetime(2026, 9, 6, 21, 0, tzinfo=UTC)), "2026-09-07")   # Sunday night UTC = Monday in Pakistan
+
+
+class RankTests(unittest.TestCase):
+    def test_dense_rank_and_ties(self):
+        rows = [{"name": "A", "accepted": 10, "completion_rate": 5.0, "avg_progress": 10.0},
+                {"name": "B", "accepted": 10, "completion_rate": 5.0, "avg_progress": 10.0},
+                {"name": "C", "accepted": 10, "completion_rate": 1.0, "avg_progress": 3.0},
+                {"name": "Z", "accepted": 0, "completion_rate": 0.0, "avg_progress": 0.0}]
+        M.rank_rows(rows)
+        ranks = {r["name"]: r["rank"] for r in rows}
+        self.assertEqual((ranks["A"], ranks["B"], ranks["C"], ranks["Z"]), (1, 1, 3, None))
 
 
 # ---------------------------------------------------------------- pipeline (identity resolution)
@@ -371,7 +371,6 @@ class PipelineTests(unittest.TestCase):
         ds = run([], [final_row("123", "a@x.com")], [])
         self.assertIn("FINAL_BAD_CNIC", self.codes(ds))
         self.assertEqual(len(ds["participants"]), 1)   # kept, keyed by email
-
 
 
 class SanitizeTests(unittest.TestCase):

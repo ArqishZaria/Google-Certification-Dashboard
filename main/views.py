@@ -1,14 +1,14 @@
 import os
 import tempfile
-from datetime import date
 from collections import Counter
+from datetime import date
 from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Case, IntegerField, Q, Value, When
-from django.http import Http404, HttpResponse
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -52,12 +52,14 @@ def filter_context(request, eff):
     if request.GET.get("council", "").isdigit():
         area_list = Area.objects.filter(local_council_id=int(request.GET["council"]))
     return {"filter_regions": regions, "filter_councils": councils.order_by("region__sort_order", "name"), "filter_areas": area_list,
-            "sel_programme": request.GET.get("programme", ""), "sel_region": request.GET.get("region", ""), "sel_council": request.GET.get("council", ""), "sel_area": request.GET.get("area", "")}
+            "sel_programme": request.GET.get("programme", ""), "sel_region": request.GET.get("region", ""),
+            "sel_council": request.GET.get("council", ""), "sel_area": request.GET.get("area", "")}
 
 
 def base_ctx(request, eff, **extra):
     imp = DataImport.objects.first()
-    ctx = {"eff": eff, "scope_label": eff["label"], "imp": imp, "data_alerts": (imp.stats or {}).get("alerts", []) if imp else [], "as_of": imp.as_of if imp else None,
+    ctx = {"eff": eff, "scope_label": eff["label"], "imp": imp, "data_alerts": (imp.stats or {}).get("alerts", []) if imp else [],
+           "as_of": imp.as_of if imp else None,
            "can_import": is_staff_user(request.user), "is_national": eff["level"] == "national",
            "query": request.GET.urlencode()}
     ctx.update(filter_context(request, eff))

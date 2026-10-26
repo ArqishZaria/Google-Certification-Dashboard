@@ -2,9 +2,9 @@
 import csv
 import io
 from datetime import date
+from xml.sax.saxutils import escape as _esc
 
 from django.http import HttpResponse
-
 
 from .logic.sanitize import cell_value as _cell, sheet_title
 
@@ -77,8 +77,7 @@ def to_pdf(title, subtitle, columns, rows):
     head.leading = small.leading
 
     def p(v, st):
-        from xml.sax.saxutils import escape
-        return Paragraph(escape(str(_cell(v))), st)
+        return Paragraph(_esc(str(_cell(v))), st)
 
     data = [[p(c, head) for c in columns]] + [[p(v, small) for v in r] for r in rows]
     width = landscape(A4)[0] - 20 * mm
@@ -89,7 +88,6 @@ def to_pdf(title, subtitle, columns, rows):
         ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#C9D1DC")),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]))
-    from xml.sax.saxutils import escape as _esc
     doc.build([Paragraph(_esc(title), styles["Title"]), Paragraph(_esc(subtitle), styles["Italic"]), Spacer(1, 4 * mm), t])
     resp = HttpResponse(buf.getvalue(), content_type="application/pdf")
     resp["Content-Disposition"] = f'attachment; filename="{_filename(title, "pdf")}"'

@@ -230,7 +230,6 @@ def age_bracket(age):
 
 
 # --------------------------------------------------------------------------- progress bands
-# Convention everywhere: lower bound INCLUSIVE, upper bound EXCLUSIVE.
 NO_PC = "No Professional Certificate enrolled"
 BRD_BANDS = ["Below 20%", "20-49%", "50-74%", "75-99%", "100%"]
 # Excel-compatible bands: labels and edges exactly as in the 2025 workbook (a value ON the edge belongs to the
@@ -244,6 +243,7 @@ def _clean(p):
 
 
 def brd_band(p):
+    """BRD bands: lower bound inclusive (exactly 20% is '20-49%')."""
     p = _clean(p)
     if p is None:
         return NO_PC

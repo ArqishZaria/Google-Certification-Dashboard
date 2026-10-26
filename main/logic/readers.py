@@ -42,7 +42,7 @@ def read_csv_rows(path_or_file):
 
 
 def identify_coursera_file(filename, headers):
-    """-> (kind, account_key, as_of_date) ; kind in program|spec|course|summary|None."""
+    """-> (kind, account_key, as_of_date) ; kind in program|spec|course|summary|summary_dup|None."""
     base = filename.replace("\\", "/").split("/")[-1]
     m = _COURSERA_NAME.match(base)
     acct = m.group("acct").lower() if m else None
@@ -52,7 +52,7 @@ def identify_coursera_file(filename, headers):
         as_of = date(y, mo, d)
     hs = set(headers)
     kind = None
-    # file-name kind is only a tie-breaker; headers decide
+    # headers decide the type; the file name is only used for the account and the date
     for k, needed in KIND_BY_HEADER:
         if needed <= hs:
             kind = k

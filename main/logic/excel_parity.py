@@ -109,7 +109,6 @@ def verify_regions(path):
 
     wb = load_workbook(path, data_only=True, read_only=True)
     ws = wb["National Pivot"]
-    short = {"Ishkoman Puniyal": "Ishkoman Puniyal"}
 
     def block(col_label, first_row, last_row, cols):
         out = {}

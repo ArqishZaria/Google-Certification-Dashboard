@@ -1,4 +1,5 @@
-"""The 10 downloadable reports required by the BRD (s.11). Pure Python: (columns, rows) from plain dicts."""
+"""The 10 downloadable reports required by the BRD (s.11) + an Excel-compatible report.
+Pure Python: (columns, rows) from plain dicts."""
 from __future__ import annotations
 
 from .logic import catalog as C

@@ -21,6 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 from . import catalog as C
 
 DEFAULT_INACTIVITY_DAYS = 14
+LOCAL_UTC_OFFSET_HOURS = 5   # Pakistan Standard Time (no DST): months/weeks are bucketed in local time, not UTC
 
 
 def _ts(dt):
@@ -221,7 +222,7 @@ def kpis(parts, registrations=0):
 
 
 def group_table(parts, regs, key, order=None):
-    """KPI rows grouped by `key` (e.g. 'region', 'local_council', 'area').
+    """KPI rows grouped by `key` (e.g. 'region', 'council_label', 'area_label').
     `regs` is the list of registration dicts (they carry the same grouping keys)."""
     gp, gr = defaultdict(list), Counter()
     for p in parts:
@@ -255,15 +256,6 @@ def rank_rows(rows, min_accepted=1):
     for r in rows:
         r.setdefault("rank", None)
     return ranked
-
-
-def _count_by(parts, key_fn, order=None):
-    c = Counter(key_fn(p) for p in parts)
-    if order:
-        out = [(k, c.get(k, 0)) for k in order if k in c or True]
-        extra = [(k, v) for k, v in c.items() if k not in order]
-        return out + sorted(extra)
-    return sorted(c.items(), key=lambda kv: -kv[1])
 
 
 def stage_split(parts, key_fn, order=None):
@@ -300,16 +292,13 @@ def funnel(parts, regs_total):
 
 
 def progress_distribution(parts):
-    """BRD bands over participants enrolled in a PC (+ the 'no PC' remainder among started)."""
+    """BRD bands over accepted participants enrolled in a PC."""
     c = Counter(p["progress_band"] for p in parts if p["license_state"] == "ACCEPTED" and p["pc_progress"] is not None)
     return [(b, c.get(b, 0)) for b in C.BRD_BANDS]
 
 
 def zero_progress_count(parts):
     return sum(1 for p in parts if p["license_state"] == "ACCEPTED" and p["pc_progress"] is not None and p["pc_progress"] == 0)
-
-
-LOCAL_UTC_OFFSET_HOURS = 5   # Pakistan Standard Time (no DST): months/weeks are bucketed in local time, not UTC
 
 
 def _local(dt):
@@ -412,7 +401,7 @@ def heatmap(specs, group_key, groups=None):
 
 
 def courses_per_learner(parts):
-    """Distribution: how many specializations each started participant enrolled in (old chart 7)."""
+    """Distribution: how many specializations each started participant enrolled in."""
     c = Counter(p["specs_enrolled"] for p in parts if p["started"])
     return sorted(c.items())
 
@@ -444,7 +433,7 @@ def cross_tab(parts, row_fn, col_fn, row_order=None, col_order=None, only=lambda
 
 
 def group_band_matrix(parts, key, order=None):
-    """Per group: accepted participants split by progress band (replaces the 100% / >50% / <50% / 0% regional charts)."""
+    """Per group: accepted participants split by progress band."""
     bands = C.BRD_BANDS + [C.NO_PC, "Not started"]
     cnt = defaultdict(Counter)
     for p in parts:

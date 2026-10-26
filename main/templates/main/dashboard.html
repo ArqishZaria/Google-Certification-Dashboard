@@ -107,6 +107,7 @@
     {% for p in pay.most_inactive %}<tr><td><a href="{% url 'participant_detail' p.public_id %}">{{ p.name }}</a></td><td>{{ p.region }}</td><td>{{ p.pc_family|default:"-" }}</td><td class="n">{{ p.pc_progress|default_if_none:"-" }}</td><td class="n">{{ p.days_inactive }}</td></tr>{% endfor %}
   </table></div><p><a href="{% url 'followup' %}?list=inactive&{{ query }}">Full inactive list &rarr;</a></p></div>
 </div>
+
 <div class="card" id="excel-view"><h2>Excel-compatible view (2025 workbook definitions)</h2>
   <p class="note">The same cards as the previous Excel dashboard, computed with <b>its</b> rules so the two can be compared: "started" = enrolled in a <i>specialization</i>; "completed" = <i>any</i> specialization (AI Essentials, Prompting Essentials etc. included); each candidate is placed <b>once</b> by their most advanced specialization; the course columns count every specialization enrolment. The BRD completion figures above count Professional Certificates only.</p>
   <div class="kpis">
@@ -126,7 +127,6 @@
   <div class="tscroll"><table><tr><th>{{ group_title }}</th><th class="n">Invited</th><th class="n">Started</th><th class="n">Not started</th><th class="n">Courses registered</th><th class="n">Candidates 100%</th><th class="n">Courses 100%</th><th class="n">Cand. &gt;50%</th><th class="n">Courses &gt;50%</th><th class="n">Cand. &lt;50%</th><th class="n">Courses &lt;50%</th><th class="n">Cand. 0%</th><th class="n">Courses 0%</th></tr>
   {% for r in pay.legacy_groups %}<tr><td>{{ r.name }}</td><td class="n">{{ r.invited }}</td><td class="n">{{ r.started }}</td><td class="n">{{ r.not_started }}</td><td class="n">{{ r.courses_registered }}</td><td class="n">{{ r.completed_candidates }}</td><td class="n">{{ r.courses_completed }}</td><td class="n">{{ r.gt50_candidates }}</td><td class="n">{{ r.gt50_courses }}</td><td class="n">{{ r.lt50_candidates }}</td><td class="n">{{ r.lt50_courses }}</td><td class="n">{{ r.zero_candidates }}</td><td class="n">{{ r.zero_courses }}</td></tr>{% endfor %}</table></div>
 </div>
-
 {{ charts|json_script:"chart-data" }}
 {% endblock %}
 {% block scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script><script src="{% static 'main/js/dashboard.js' %}"></script>{% endblock %}
