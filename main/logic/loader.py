@@ -9,6 +9,40 @@ from . import pipeline as P
 from . import readers as R
 
 
+class MissingFilesError(ValueError):
+    """Required inputs are not (all) present yet - not a data error, just an incomplete file set."""
+
+
+def classify_path(path):
+    """Detect what one file is, from its CONTENT. -> dict(name, kind, account, file_date, description).
+    kind: master | final | program | spec | course | summary | ignored"""
+    name = os.path.basename(path)
+    low = name.lower()
+    out = {"name": name, "kind": "ignored", "account": "", "file_date": None, "description": "Not used by the dashboard"}
+    if low.endswith((".xlsx", ".xlsm")):
+        sheets = R.read_xlsx_sheets(path)
+        m, f = R.looks_like_master(sheets), R.looks_like_final_list(sheets)
+        if m and not f:
+            out.update(kind="master", description=f"Registration master ({len(sheets[m])} rows)")
+        elif f and not m:
+            out.update(kind="final", description=f"Shortlist / final list ({sum(len(v) for v in f.values())} rows in {len(f)} sheets)")
+        else:
+            out["description"] = "Not a registration master or final-list workbook"
+    elif low.endswith(".csv"):
+        rows, headers = R.read_csv_rows(path)
+        kind, acct, fdate = R.identify_coursera_file(name, headers)
+        if kind in ("program", "spec", "course") and acct:
+            label = {"program": "Program", "spec": "Specialisation", "course": "Course"}[kind]
+            out.update(kind=kind, account=acct, file_date=fdate, description=f"Coursera {label} Activity - {len(rows)} rows")
+        elif kind == "summary" and acct and rows:
+            out.update(kind="summary", account=acct, file_date=fdate, description="Coursera control totals (Activity By Business Unit)")
+        else:
+            out["description"] = "Coursera file not used by the dashboard"
+    else:
+        out["description"] = "Unsupported file type"
+    return out
+
+
 def load_sources(paths, overrides=None, spec_overrides=None, inactivity_days=M.DEFAULT_INACTIVITY_DAYS, as_of=None):
     """`paths`: list of file paths (xlsx + csv, any order). File type is detected from CONTENT, not just the name.
     Returns (Sources, detected) where detected is a list of (filename, description)."""
@@ -59,7 +93,7 @@ def load_sources(paths, overrides=None, spec_overrides=None, inactivity_days=M.D
     if not any("program" in d for d in coursera.values()):
         missing.append("Coursera Program Activity CSV")
     if missing:
-        raise ValueError("Missing required file(s): " + "; ".join(missing))
+        raise MissingFilesError("Missing required file(s): " + "; ".join(missing))
     for acct, d in coursera.items():
         d.setdefault("program", [])
         d.setdefault("spec", [])

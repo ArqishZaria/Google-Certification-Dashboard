@@ -8,7 +8,7 @@ from django.db.models import Q
 from .logic import catalog as C
 from .logic import loader, metrics as M, pipeline as P
 from .models import (Area, CourseEnrollment, DataImport, DataIssue, IdentityOverride, License, LocalCouncil,
-                     Participant, Region, Registration, Specialization, SpecializationEnrollment, UserScope)
+                     Participant, Region, Registration, SourceFile, Specialization, SpecializationEnrollment, UserScope)
 
 INACTIVITY_DAYS = getattr(settings, "GCC_INACTIVITY_DAYS", M.DEFAULT_INACTIVITY_DAYS)
 
@@ -33,6 +33,66 @@ def db_overrides():
     identity = {(o.account, o.email.lower()): o.cnic for o in IdentityOverride.objects.all()}
     spec = {s.slug: {"family": s.family, "category": s.category} for s in Specialization.objects.all()}
     return identity, spec
+
+
+def clear_snapshot():
+    """Empty the computed snapshot (catalogue, geography, users and overrides are kept)."""
+    for m in (DataIssue, CourseEnrollment, SpecializationEnrollment, License, Participant, Registration, DataImport):
+        m.objects.all().delete()
+
+
+def _rebuild_from_store(user=None, allow_fewer_accounts=False):
+    """Recompute the dashboard from the files currently stored. Returns the DataImport, or None when the
+    required files are not all loaded (in which case the snapshot is cleared so nothing stale is shown)."""
+    import os
+    import tempfile
+    files = list(SourceFile.objects.all())
+    with tempfile.TemporaryDirectory() as tmp:
+        paths = []
+        for i, f in enumerate(files):
+            d = os.path.join(tmp, str(i))
+            os.makedirs(d)
+            path = os.path.join(d, f.name)
+            with open(path, "wb") as out:
+                out.write(bytes(f.content))
+            paths.append(path)
+        try:
+            return run_import(paths, user, allow_fewer_accounts=allow_fewer_accounts)
+        except loader.MissingFilesError:
+            clear_snapshot()
+            return None
+
+
+@transaction.atomic
+def add_source_files(paths_and_names, user=None, allow_fewer_accounts=False):
+    """Store uploaded files (replacing any earlier file of the same kind+account), then rebuild.
+    -> (imp_or_None, stored, skipped). Any failure rolls back BOTH the stored files and the snapshot."""
+    import os
+    stored, skipped = [], []
+    for path, name in paths_and_names:
+        info = loader.classify_path(path)
+        info["name"] = name
+        if info["kind"] == "ignored":
+            skipped.append((name, info["description"]))
+            continue
+        with open(path, "rb") as fh:
+            data = fh.read()
+        SourceFile.objects.update_or_create(
+            kind=info["kind"], account=info["account"],
+            defaults=dict(name=name, file_date=info["file_date"], description=info["description"], size=len(data),
+                          content=data, uploaded_by=user))
+        stored.append(name)
+    if not stored:
+        return None, stored, skipped
+    return _rebuild_from_store(user, allow_fewer_accounts), stored, skipped
+
+
+@transaction.atomic
+def remove_source_file(pk, user=None):
+    """Delete one stored file and rebuild from what is left (an explicit removal may drop a Coursera account)."""
+    f = SourceFile.objects.get(pk=pk)
+    f.delete()
+    return f, _rebuild_from_store(user, allow_fewer_accounts=True)
 
 
 @transaction.atomic

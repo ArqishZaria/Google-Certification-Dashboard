@@ -85,6 +85,27 @@ class DataImport(models.Model):
         return f"Import {self.created_at:%Y-%m-%d %H:%M} (data as of {self.as_of})"
 
 
+class SourceFile(models.Model):
+    """An uploaded input file that is kept, so the dashboard can be rebuilt from the set of files currently loaded.
+    One file per (kind, account): uploading a newer export of the same thing replaces the old one."""
+    name = models.CharField(max_length=255)
+    kind = models.CharField(max_length=10, db_index=True)       # master | final | program | spec | course | summary
+    account = models.CharField(max_length=120, blank=True, default="")
+    file_date = models.DateField(blank=True, null=True, help_text="Export date taken from the file name.")
+    description = models.CharField(max_length=200, blank=True, default="")
+    size = models.PositiveIntegerField(default=0)
+    content = models.BinaryField()
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        ordering = ["kind", "account", "name"]
+        constraints = [models.UniqueConstraint(fields=["kind", "account"], name="uniq_sourcefile_kind_account")]
+
+    def __str__(self):
+        return f"{self.name} ({self.kind}{' / ' + self.account if self.account else ''})"
+
+
 class Registration(models.Model):
     form_id = models.PositiveIntegerField(unique=True)
     name = models.CharField(max_length=200)
