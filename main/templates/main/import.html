@@ -1,28 +1,23 @@
-{% extends "main/base.html" %}{% load gcc %}{% block title %}Import data{% endblock %}
-{% block content %}<h1>Import / refresh data</h1>
-<p class="sub">Files you load stay loaded. Uploading a newer export of the same file type (same Coursera account) <b>replaces</b> the old one; click &#10005; to remove a file. The dashboard is recalculated after every change, and if anything fails nothing is changed.</p>
-
-<div class="card"><h2>Loaded files</h2>
-{% if source_files %}
-<div class="tscroll"><table><thead><tr><th>File</th><th>Type</th><th>Account</th><th>Export date</th><th>Loaded</th><th>By</th><th></th></tr></thead><tbody>
-{% for f in source_files %}<tr>
-<td>{{ f.name }}<div class="sub" style="margin:0;font-size:11px">{{ f.description }}</div></td>
-<td>{{ kind_labels|getitem:f.kind|default:f.kind }}</td>
-<td>{{ f.account|default:"-" }}</td>
-<td>{{ f.file_date|date:"d M Y"|default:"-" }}</td>
-<td>{{ f.uploaded_at|date:"d M Y H:i" }}</td>
-<td>{{ f.uploaded_by.get_username|default:"-" }}</td>
-<td><form method="post" action="{% url 'remove_source' f.pk %}" onsubmit="return confirm('Remove {{ f.name|escapejs }}? The dashboard will be recalculated without it.')">{% csrf_token %}
-<button type="submit" class="btn sm red" title="Remove this file" aria-label="Remove {{ f.name }}">&#10005;</button></form></td>
-</tr>{% endfor %}</tbody></table></div>
-{% else %}<p class="sub">No files are loaded yet.{% if imp %} The current data came from an earlier import whose files were not kept; upload the files again to manage them here.{% endif %}</p>{% endif %}
-<p style="margin-top:12px"><b>Required:</b> {% for label, ok in checklist %}<span class="pill {% if ok %}p-COMPLETED{% else %}p-NO_PC{% endif %}">{% if ok %}&#10003;{% else %}&#10007;{% endif %} {{ label }}</span> {% endfor %}</p>
+{% extends "main/base.html" %}{% block title %}Import data{% endblock %}
+{% block content %}<h1>Import data</h1>
+<div class="card">
+<form method="post" enctype="multipart/form-data" id="upform" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">{% csrf_token %}
+<label class="btn" style="cursor:pointer">Upload files<input type="file" name="files" multiple required accept=".xlsx,.csv" style="display:none" onchange="this.form.submit()"></label>
+<label class="note" style="font-size:12px"><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than before</label>
+</form>
+<p class="sub" style="margin:10px 0 0;font-size:12px">Pick one or more files; they upload immediately. A newer file of the same type replaces the old one.</p>
 </div>
 
-<div class="card"><h2>Add / replace files</h2><form method="post" enctype="multipart/form-data">{% csrf_token %}
-<p>File types are detected from their content, so names don't matter. Needed: registration master, final list, and a Coursera <b>Program Activity</b> CSV per account. Recommended: Specialisation + Course Activity CSV per account and <b>Activity By Business Unit</b> (reconciles our numbers with Coursera's totals). Other Coursera files are skipped.</p>
-<p><input type="file" name="files" multiple required accept=".xlsx,.csv"></p>
-<p class="note"><label><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than the previous import</label></p>
-<button class="btn" type="submit">Upload</button></form></div>
-{% if imp %}<div class="card"><h2>Current data</h2><p>Calculated {{ imp.created_at }} - data as of <b>{{ imp.as_of }}</b></p></div>{% endif %}
+<div class="card"><h2>Uploaded files ({{ source_files|length }})</h2>
+{% if source_files %}
+{% for f in source_files %}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)">
+  <div style="min-width:0"><div style="overflow-wrap:anywhere">{{ f.name }}</div>
+    <div class="sub" style="margin:0;font-size:11px">{{ f.description }}{% if f.account %} &middot; {{ f.account }}{% endif %} &middot; uploaded {{ f.uploaded_at|date:"d M Y H:i" }}</div></div>
+  <form method="post" action="{% url 'remove_source' f.pk %}" onsubmit="return confirm('Remove {{ f.name|escapejs }}? The dashboard will be recalculated without it.')">{% csrf_token %}
+    <button type="submit" class="btn sm red" title="Remove this file" aria-label="Remove {{ f.name }}">&#10005;</button></form>
+</div>{% endfor %}
+{% else %}<p class="sub">No files uploaded yet.{% if imp %} The current data came from an earlier import whose files were not kept; upload the files again to manage them here.{% endif %}</p>{% endif %}
+<p style="margin:14px 0 0;font-size:12px"><b>Required:</b> {% for label, ok in checklist %}<span class="pill {% if ok %}p-COMPLETED{% else %}p-NO_PC{% endif %}">{% if ok %}&#10003;{% else %}&#10007;{% endif %} {{ label }}</span> {% endfor %}</p>
+</div>
 {% endblock %}
