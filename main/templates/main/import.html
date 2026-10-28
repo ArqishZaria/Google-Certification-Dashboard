@@ -1,14 +1,23 @@
 {% extends "main/base.html" %}{% block title %}Import data{% endblock %}
-{% block content %}<h1>Import / refresh data</h1>
-<p class="sub">Upload all files in one go. File types are detected from their content, so the names don't matter. Each import <b>replaces</b> the previous snapshot completely (it is safe to re-run), and if anything fails nothing is changed.</p>
-<div class="card"><form method="post" enctype="multipart/form-data">{% csrf_token %}
-<p><b>Required</b></p><ul>
-<li>Registration master workbook (<code>Master sheet - GCC ....xlsx</code>)</li>
-<li>Final list workbook (<code>Final list - ....xlsx</code>)</li>
-<li>Coursera <b>Program Activity</b> CSV for each Coursera account</li></ul>
-<p><b>Recommended</b>: Specialisation Activity + Course Activity CSV for each account, and <b>Activity By Business Unit</b> (used to reconcile our numbers against Coursera's own totals). Other Coursera files are ignored safely.</p>
-<p><input type="file" name="files" multiple required accept=".xlsx,.csv"></p>
-<p class="note"><label><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than the previous import</label></p>
-<button class="btn" type="submit">Import</button></form></div>
-{% if imp %}<div class="card"><h2>Last import</h2><p>{{ imp.created_at }} - data as of <b>{{ imp.as_of }}</b></p><ul>{% for f in imp.files %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
+{% block content %}<h1>Import data</h1>
+<div class="card">
+<form method="post" enctype="multipart/form-data" id="upform" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">{% csrf_token %}
+<label class="btn" style="cursor:pointer">Upload files<input type="file" name="files" multiple required accept=".xlsx,.csv" style="display:none" onchange="this.form.submit()"></label>
+<label class="note" style="font-size:12px"><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than before</label>
+</form>
+<p class="sub" style="margin:10px 0 0;font-size:12px">Pick one or more files; they upload immediately. A newer file of the same type replaces the old one.</p>
+</div>
+
+<div class="card"><h2>Uploaded files ({{ source_files|length }})</h2>
+{% if source_files %}
+{% for f in source_files %}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)">
+  <div style="min-width:0"><div style="overflow-wrap:anywhere">{{ f.name }}</div>
+    <div class="sub" style="margin:0;font-size:11px">{{ f.description }}{% if f.account %} &middot; {{ f.account }}{% endif %} &middot; uploaded {{ f.uploaded_at|date:"d M Y H:i" }}</div></div>
+  <form method="post" action="{% url 'remove_source' f.pk %}" onsubmit="return confirm('Remove {{ f.name|escapejs }}? The dashboard will be recalculated without it.')">{% csrf_token %}
+    <button type="submit" class="btn sm red" title="Remove this file" aria-label="Remove {{ f.name }}">&#10005;</button></form>
+</div>{% endfor %}
+{% else %}<p class="sub">No files uploaded yet.{% if imp %} The current data came from an earlier import whose files were not kept; upload the files again to manage them here.{% endif %}</p>{% endif %}
+<p style="margin:14px 0 0;font-size:12px"><b>Required:</b> {% for label, ok in checklist %}<span class="pill {% if ok %}p-COMPLETED{% else %}p-NO_PC{% endif %}">{% if ok %}&#10003;{% else %}&#10007;{% endif %} {{ label }}</span> {% endfor %}</p>
+</div>
 {% endblock %}

@@ -11,7 +11,7 @@ from . import normalize as N
 # Coursera enterprise export file names look like:
 #   Program_Activity_gwg-ent-akepb-ii_-_CourseraEnterpriseExport_2026-09-16_05-42-47_UTC.csv
 _COURSERA_NAME = re.compile(
-    r"^(?P<kind>.+?)_(?P<acct>gwg-ent-.+?)_-_CourseraEnterpriseExport_(?P<date>\d{4}-\d{2}-\d{2})_",
+    r"^(?P<kind>.+?)[_ ](?P<acct>gwg-ent-.+?)[_ ]-[_ ]CourseraEnterpriseExport[_ ](?P<date>\d{4}-\d{2}-\d{2})[_ ]",
     re.I,
 )
 
@@ -59,7 +59,7 @@ def identify_coursera_file(filename, headers):
             break
     if kind == "summary" and not any(h in hs for h in ("Business Unit",)):
         # Activity_By_City / Country exports duplicate the same totals - only the Business Unit one is used
-        if m and not m.group("kind").lower().startswith("activity_by_business_unit"):
+        if m and not m.group("kind").lower().replace(" ", "_").startswith("activity_by_business_unit"):
             kind = "summary_dup"
     return kind, acct, as_of
 

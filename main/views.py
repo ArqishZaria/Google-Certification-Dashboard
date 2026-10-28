@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 from . import exports, reports, services
 from .logic import catalog as C
 from .logic import metrics as M
-from .models import (Area, DataImport, DataIssue, LocalCouncil, Participant, Region, Registration, Specialization)
+from .models import (Area, DataImport, DataIssue, LocalCouncil, Participant, Region, Registration, SourceFile, Specialization)
 
 GROUP_TITLES = {"region": "Region", "council_label": "Local council", "area_label": "Area (Jamatkhana)"}
 
@@ -253,7 +253,7 @@ def import_data(request):
             messages.error(request, "Please choose the files to import.")
         else:
             with tempfile.TemporaryDirectory() as tmp:
-                paths = []
+                pairs = []
                 for i, f in enumerate(files):
                     safe = os.path.basename(f.name)
                     os.makedirs(os.path.join(tmp, str(i)), exist_ok=True)      # same file name twice must not overwrite
@@ -261,17 +261,53 @@ def import_data(request):
                     with open(path, "wb") as out:
                         for chunk in f.chunks():
                             out.write(chunk)
-                    paths.append(path)
+                    pairs.append((path, safe))
                 try:
-                    imp = services.run_import(paths, request.user, allow_fewer_accounts=bool(request.POST.get("allow_fewer")))
+                    imp, stored, skipped = services.add_source_files(pairs, request.user, allow_fewer_accounts=bool(request.POST.get("allow_fewer")))
                 except ValueError as e:
                     messages.error(request, str(e))
-                except Exception as e:  # nothing is changed: run_import is atomic
+                except Exception as e:  # nothing is changed: add_source_files is atomic
                     messages.error(request, f"Import failed and NOTHING was changed: {e}")
                 else:
-                    messages.success(request, f"Import complete. Data as of {imp.as_of:%d %b %Y}: {imp.stats.get('participants_licensed', 0)} licensed participants.")
-                    return redirect("data_quality")
-    return render(request, "main/import.html", base_ctx(request, eff))
+                    for name, why in skipped:
+                        messages.warning(request, f"{name}: skipped - {why}.")
+                    if imp:
+                        messages.success(request, f"Added {len(stored)} file(s). Data as of {imp.as_of:%d %b %Y}: {imp.stats.get('participants_licensed', 0)} licensed participants.")
+                        return redirect("data_quality")
+                    if stored:
+                        messages.info(request, f"Added {len(stored)} file(s). The dashboard will update once all required files are loaded (see the checklist below).")
+                    return redirect("import_data")
+    return render(request, "main/import.html", base_ctx(request, eff, **import_context()))
+
+
+def import_context():
+    loaded = list(SourceFile.objects.defer("content"))
+    kinds = {f.kind for f in loaded}
+    checklist = [("Registration master workbook", "master" in kinds),
+                 ("Final list workbook", "final" in kinds),
+                 ("Coursera Program Activity CSV (at least one account)", "program" in kinds)]
+    return {"source_files": loaded, "checklist": checklist,
+            "kind_labels": {"master": "Registration master", "final": "Final list", "program": "Coursera Program", "spec": "Coursera Specialisation",
+                            "course": "Coursera Course", "summary": "Coursera totals"}}
+
+
+@require_POST
+@login_required
+def remove_source(request, pk):
+    if not is_staff_user(request.user):
+        return render(request, "main/no_access.html", status=403)
+    try:
+        f, imp = services.remove_source_file(pk, request.user)
+    except SourceFile.DoesNotExist:
+        messages.error(request, "That file was already removed.")
+    except Exception as e:
+        messages.error(request, f"Could not remove the file; NOTHING was changed: {e}")
+    else:
+        if imp:
+            messages.success(request, f"Removed {f.name}. Dashboard recalculated from the remaining files.")
+        else:
+            messages.warning(request, f"Removed {f.name}. A required file is now missing, so the dashboard is empty until it is uploaded again.")
+    return redirect("import_data")
 
 
 @require_POST

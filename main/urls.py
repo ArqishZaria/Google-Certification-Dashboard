@@ -16,6 +16,7 @@ urlpatterns = [
     path("dashboard/reports/<slug:slug>/download/<str:fmt>/", views.report_download, name="report_download"),
     path("dashboard/data-quality/", views.data_quality, name="data_quality"),
     path("dashboard/import/", views.import_data, name="import_data"),
+    path("dashboard/import/<int:pk>/remove/", views.remove_source, name="remove_source"),
     path("dashboard/recalculate/", views.recalculate, name="recalculate"),
     path("dashboard/methodology/", views.methodology, name="methodology"),
 ]
