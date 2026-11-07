@@ -4,7 +4,7 @@
 <div class="card"><h2>Reconciliation with Coursera's own totals</h2>
 {% if recon_bad %}<div class="msg error">{{ recon_bad|length }} check(s) do not match Coursera's summary. Investigate before trusting the numbers.</div>{% else %}<div class="msg success">Every figure we recompute from the raw rows matches Coursera's summary export.</div>{% endif %}
 <table><tr><th>Coursera account</th><th>Check</th><th class="n">Coursera says</th><th class="n">We compute</th><th></th></tr>
-{% for c in imp.recon %}<tr><td>{{ c.account }}</td><td>{{ c.label }}</td><td class="n">{{ c.expected|default_if_none:"-" }}</td><td class="n">{{ c.actual|default_if_none:"-" }}</td><td>{% if c.ok %}<span class="ok">&#10003;</span>{% elif c.ok is None %}-{% else %}<span class="bad">&#10007;</span>{% endif %}</td></tr>{% endfor %}</table>
+{% for c in imp.recon %}<tr><td>{{ c.account }}</td><td>{{ c.label }}</td><td class="n">{{ c.expected|default_if_none:"-" }}</td><td class="n">{{ c.actual|default_if_none:"-" }}</td><td>{% if c.ok %}<span class="ok">&#10003;</span>{% elif c.explained %}<span title="{{ c.note }}">&asymp; expected</span>{% elif c.ok is None %}-{% else %}<span class="bad">&#10007;</span>{% endif %}</td></tr>{% endfor %}</table>
 <p class="note">Note: "Started learning" on the dashboard also counts people enrolled in a specialization but with no individual course yet, so it can be slightly higher than Coursera's "Current learners".</p></div>
 <div class="card"><h2>Maintenance</h2>
 {% if can_import %}<form method="post" action="{% url 'recalculate' %}" style="display:inline">{% csrf_token %}<button class="btn" type="submit">Recalculate all participants</button></form> <a class="btn alt" href="{% url 'import_data' %}">Import new data</a>

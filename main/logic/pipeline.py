@@ -493,6 +493,9 @@ def N_ts(dt):
     return dt.timestamp() if dt else float("-inf")
 
 
+MAX_PER_DELETED_MEMBER = 30   # a deleted member can plausibly account for at most this many course enrolments
+
+
 def reconcile(src: Sources):
     """Compare numbers recomputed from the raw rows with Coursera's own summary export (Activity_By_Business_Unit)."""
     checks = []
@@ -506,6 +509,7 @@ def reconcile(src: Sources):
         progs = [N.parse_float(r.get("Overall Progress"), 0.0) for r in course]
         avg = round(sum(progs) / len(progs), 2) if progs else 0.0
         done = sum(1 for r in course if N.is_yes(r.get("Completed")))
+        deleted = N.parse_float((summ or {}).get("Deleted Members")) or 0
         if not summ:
             checks.append({"account": acct, "label": "Coursera summary export not supplied", "expected": None, "actual": None, "ok": None})
             continue
@@ -516,6 +520,23 @@ def reconcile(src: Sources):
             ("Average course progress %", N.parse_float(summ.get("Average Progress")), avg, 0.01),
             ("Total completed courses", N.parse_float(summ.get("Total Completed Courses")), done, 0),
         ):
-            checks.append({"account": acct, "label": label, "expected": exp, "actual": act,
-                           "ok": exp is not None and abs(exp - act) <= tol})
+            ok = exp is not None and abs(exp - act) <= tol
+            check = {"account": acct, "label": label, "expected": exp, "actual": act, "ok": ok}
+            # Coursera's summary still counts people whose licence was deleted ("Deleted Members"); the per-person
+            # exports no longer list them. When Coursera is HIGHER than what the rows add up to and the gap is plausible
+            # for that many deleted members, it is an expected difference, not a data error.
+            if not ok and exp is not None and deleted > 0 and label != "Current members (accepted licences)":
+                gap = exp - act
+                if label.startswith("Average"):
+                    explained = abs(gap) <= 5.0
+                elif label.startswith("Current learners"):
+                    explained = 0 < gap <= deleted
+                else:
+                    explained = 0 < gap <= MAX_PER_DELETED_MEMBER * deleted
+                if explained:
+                    check["ok"] = None
+                    check["explained"] = True
+                    check["note"] = (f"Coursera's total also counts {deleted:g} deleted member(s) who are no longer in the "
+                                     "per-person exports, so it is expected to be higher.")
+            checks.append(check)
     return checks
