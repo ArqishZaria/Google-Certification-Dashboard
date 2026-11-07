@@ -79,6 +79,7 @@ LOGIN_REDIRECT_URL = "dashboard"
 LOGOUT_REDIRECT_URL = "login"
 
 # Dashboard rules
+GCC_DATA_DIR = BASE_DIR / "data_store"   # latest uploaded files (contains personal data - never commit, never serve)
 GCC_INACTIVITY_DAYS = 14            # a learner with no activity for more than this many days (before the data snapshot) is "inactive"
 DATA_UPLOAD_MAX_NUMBER_FILES = 200   # the Coursera export has 16 files
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024

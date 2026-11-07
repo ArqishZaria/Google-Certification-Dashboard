@@ -1,23 +1,60 @@
 {% extends "main/base.html" %}{% block title %}Import data{% endblock %}
-{% block content %}<h1>Import data</h1>
-<div class="card">
-<form method="post" enctype="multipart/form-data" id="upform" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">{% csrf_token %}
-<label class="btn" style="cursor:pointer">Upload files<input type="file" name="files" multiple required accept=".xlsx,.csv" style="display:none" onchange="this.form.submit()"></label>
-<label class="note" style="font-size:12px"><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than before</label>
-</form>
-<p class="sub" style="margin:10px 0 0;font-size:12px">Pick one or more files; they upload immediately. A newer file of the same type replaces the old one.</p>
+{% block content %}<h1>Update the dashboard data</h1>
+<p class="sub">Three kinds of file feed the dashboard. Pick what you want to upload, add the file(s), and press the button. We check everything first - if something is wrong we tell you exactly what, and <b>nothing is changed</b>.</p>
+
+<div class="card howto">
+  <b>How it works</b>
+  <ol>
+    <li><b>Choose</b> what you are uploading from the list below.</li>
+    <li><b>Not sure what a file should look like?</b> Use the <i>Download template</i> button in that box.</li>
+    <li><b>Upload</b>, then press <i>Check and import</i>. Anything you do not upload keeps using the file that is already loaded.</li>
+  </ol>
 </div>
 
-<div class="card"><h2>Uploaded files ({{ source_files|length }})</h2>
-{% if source_files %}
-{% for f in source_files %}
-<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)">
-  <div style="min-width:0"><div style="overflow-wrap:anywhere">{{ f.name }}</div>
-    <div class="sub" style="margin:0;font-size:11px">{{ f.description }}{% if f.account %} &middot; {{ f.account }}{% endif %} &middot; uploaded {{ f.uploaded_at|date:"d M Y H:i" }}</div></div>
-  <form method="post" action="{% url 'remove_source' f.pk %}" onsubmit="return confirm('Remove {{ f.name|escapejs }}? The dashboard will be recalculated without it.')">{% csrf_token %}
-    <button type="submit" class="btn sm red" title="Remove this file" aria-label="Remove {{ f.name }}">&#10005;</button></form>
-</div>{% endfor %}
-{% else %}<p class="sub">No files uploaded yet.{% if imp %} The current data came from an earlier import whose files were not kept; upload the files again to manage them here.{% endif %}</p>{% endif %}
-<p style="margin:14px 0 0;font-size:12px"><b>Required:</b> {% for label, ok in checklist %}<span class="pill {% if ok %}p-COMPLETED{% else %}p-NO_PC{% endif %}">{% if ok %}&#10003;{% else %}&#10007;{% endif %} {{ label }}</span> {% endfor %}</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+<div class="card">
+  <label for="upload_type"><b>What do you want to upload?</b></label><br>
+  <select name="upload_type" id="upload_type" style="max-width:560px;width:100%;font-size:15px;padding:9px">
+    {% for value, label in upload_types %}<option value="{{ value }}" {% if value == upload_type %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
 </div>
+
+{% for s in slots %}
+<div class="card slot" data-slot="{{ s.key }}">
+  <div class="slot-head"><span class="stepno">{{ s.number }}</span><h2>{{ s.title }}</h2></div>
+  <dl class="kv slot-kv">
+    <dt>What is it?</dt><dd>{{ s.what }}</dd>
+    <dt>Where do I get it?</dt><dd>{{ s.where }}</dd>
+    <dt>What to upload</dt><dd>{{ s.type }}</dd>
+    <dt>We check for</dt><dd>{{ s.needs }}</dd>
+    <dt>Currently loaded</dt><dd>{% if s.current_count %}<span class="ok">&#10003;</span> {% if s.current_count > 1 %}{{ s.current_count }} files{% else %}{{ s.current_names.0 }}{% endif %}{% if s.current_at %} - saved {{ s.current_at|date:"d M Y, H:i" }}{% endif %}{% else %}<span class="bad">Nothing uploaded yet</span> - this one is needed for the first import{% endif %}</dd>
+  </dl>
+  <p><input type="file" name="{{ s.field }}" accept="{{ s.accept }}" {% if s.multiple %}multiple{% endif %}>
+     &nbsp; <a class="btn alt sm" href="{% url 'import_template' s.key %}">{{ s.template_label }}</a></p>
+</div>
+{% endfor %}
+
+<details class="card"><summary><b>Advanced</b></summary>
+  <p class="note"><label><input type="checkbox" name="allow_fewer" value="1"> Allow fewer Coursera accounts than the previous import</label><br>
+  Leave this unticked. It only exists for the rare case where an account was really removed.</p>
+</details>
+
+<p><button class="btn" type="submit" style="font-size:16px;padding:11px 26px">Check and import</button></p>
+</form>
+
+{% if imp %}<div class="card"><h2>Last import</h2><p>{{ imp.created_at }} - data as of <b>{{ imp.as_of }}</b></p><ul>{% for f in imp.files %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
+<script>
+(function(){
+  var sel=document.getElementById('upload_type');
+  function apply(){
+    var v=sel.value;
+    document.querySelectorAll('.slot').forEach(function(el){
+      var show=(v==='all'||v===el.getAttribute('data-slot'));
+      el.style.display=show?'':'none';
+      if(!show){el.querySelectorAll('input[type=file]').forEach(function(i){i.value='';});}
+    });
+  }
+  sel.addEventListener('change',apply); apply();
+})();
+</script>
 {% endblock %}

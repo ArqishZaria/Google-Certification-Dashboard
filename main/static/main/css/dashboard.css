@@ -42,3 +42,8 @@ tr:hover td{background:#fafcff}
 dl.kv{display:grid;grid-template-columns:170px 1fr;gap:5px 12px;margin:0}dl.kv dt{color:var(--muted)}dl.kv dd{margin:0}
 .footer{color:var(--muted);font-size:12px;text-align:center;margin-top:30px}
 @media print{.topbar,.filters,.btn{display:none}.card{break-inside:avoid}}
+.howto ol{margin:6px 0 0 18px;padding:0}.howto li{margin:3px 0}
+.slot-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}.slot-head h2{margin:0}
+.stepno{display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;border-radius:50%;background:var(--navy2);color:#fff;font-weight:700}
+dl.slot-kv{grid-template-columns:140px 1fr;margin-bottom:12px}
+details summary{cursor:pointer}

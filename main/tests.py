@@ -4,11 +4,12 @@ import os
 import tempfile
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from . import services
-from .logic.tests_logic import master_row, prog_row, spec_row
+from .logic.tests_logic import build_upload_files, master_row, prog_row, spec_row
 from .models import Participant, Region, UserScope
 
 
@@ -125,3 +126,56 @@ class ImportAndAccessTests(TestCase):
         self.assertEqual(self.client.get(reverse("data_quality")).status_code, 200)
         self.assertEqual(self.client.get(reverse("methodology")).status_code, 200)
         self.assertEqual(self.client.get(reverse("participants") + "?q=person&date_type=invited&date_from=garbage").status_code, 200)
+
+
+class UploadPageTests(TestCase):
+    """The simplified upload page: three upload types, templates, friendly errors, refresh of a single type."""
+
+    def setUp(self):
+        ctx = override_settings(GCC_DATA_DIR=tempfile.mkdtemp())      # every test gets its own empty store
+        ctx.enable()
+        self.addCleanup(ctx.disable)
+        self.tmp = tempfile.mkdtemp()
+        self.master, self.final, self.zip = build_upload_files(self.tmp)
+        User.objects.create_superuser("boss", "b@x.com", "pw")
+        self.client.login(username="boss", password="pw")
+
+    def up(self, path, name=None):
+        with open(path, "rb") as fh:
+            return SimpleUploadedFile(name or os.path.basename(path), fh.read())
+
+    def test_page_shows_three_boxes_dropdown_and_template_buttons(self):
+        r = self.client.get(reverse("import_data"))
+        self.assertContains(r, "What do you want to upload?")
+        for text in ("Master registration sheet", "Final list", "Coursera export", "Download Master template", "Download Final list template"):
+            self.assertContains(r, text)
+
+    def test_templates_download_for_staff_and_are_blocked_for_others(self):
+        for kind, ctype in (("master", "spreadsheetml"), ("final", "spreadsheetml"), ("coursera", "zip")):
+            r = self.client.get(reverse("import_template", args=[kind]))
+            self.assertEqual(r.status_code, 200)
+            self.assertIn(ctype, r["Content-Type"])
+            self.assertIn("attachment", r["Content-Disposition"])
+        self.assertEqual(self.client.get(reverse("import_template", args=["nope"])).status_code, 404)
+        User.objects.create_user("viewer", password="pw")
+        self.client.login(username="viewer", password="pw")
+        self.assertEqual(self.client.get(reverse("import_template", args=["master"])).status_code, 403)
+
+    def test_wrong_file_in_wrong_box_changes_nothing_and_explains(self):
+        r = self.client.post(reverse("import_data"), {"upload_type": "all", "master_file": self.up(self.final), "final_file": self.up(self.master)}, follow=True)
+        self.assertContains(r, "looks like the FINAL LIST")
+        self.assertEqual(Participant.objects.count(), 0)
+
+    def test_first_import_needs_all_three_then_zip_only_refresh_works(self):
+        r = self.client.post(reverse("import_data"), {"upload_type": "master", "master_file": self.up(self.master)}, follow=True)
+        self.assertContains(r, "has not been uploaded yet")
+        self.assertEqual(Participant.objects.count(), 0)
+        r = self.client.post(reverse("import_data"), {"upload_type": "all", "master_file": self.up(self.master),
+                                                     "final_file": self.up(self.final), "coursera_files": [self.up(self.zip)]})
+        self.assertRedirects(r, reverse("data_quality"))
+        self.assertEqual(Participant.objects.count(), 2)
+        # later: only the Coursera ZIP is uploaded - master and final list come from the stored copies
+        r = self.client.post(reverse("import_data"), {"upload_type": "coursera", "coursera_files": [self.up(self.zip)]})
+        self.assertRedirects(r, reverse("data_quality"))
+        self.assertEqual(Participant.objects.count(), 2)
+        self.assertContains(self.client.get(reverse("import_data")), "Currently loaded")

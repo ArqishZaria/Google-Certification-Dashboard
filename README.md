@@ -27,11 +27,27 @@ Open http://127.0.0.1:8000/dashboard/ (the existing "coming soon" page at `/` is
 
 ## How it is used (day to day)
 The dashboard is a **separate section of the website** (`/dashboard/`, its own login) - it is *not* inside the Django admin.
-1. A staff user opens **Dashboard -> Import data** (`/dashboard/import/`) and uploads, in one go: the registration master workbook (everyone who filled the form), the Final-list workbook (shortlisted), and the Coursera CSV exports of **every** Coursera account (Program, Specialisation, Course Activity + Activity By Business Unit).
-2. The system matches the three datasets (Coursera email -> CNIC), replaces the previous snapshot atomically and recomputes everything. Re-uploading newer exports later simply refreshes the numbers.
-3. Chairs log in and see only their own region / council / area. National users also get **Data quality** (reconciliation with Coursera's totals, unmatched people, warnings).
+
+**Upload page** (`/dashboard/import/`, staff only). Pick what you are uploading from the dropdown:
+
+| Dropdown choice | You upload | Template button |
+|---|---|---|
+| Everything (first time / full refresh) | all three boxes below | |
+| Only the new Coursera export | **Step 3** - one ZIP per Coursera account (select both at once) | Download guide |
+| Only the Final list | **Step 2** - the Final list workbook (.xlsx) | Download Final list template |
+| Only the Master registration sheet | **Step 1** - the Google-Form export (.xlsx) | Download Master template |
+
+* Anything you do **not** upload keeps using the file stored by the last successful import (kept in `data_store/`, which holds personal data: it is git-ignored and never served).
+* The **first** import needs all three.
+* Every file is checked **before** anything changes. Mistakes are explained in plain words (e.g. "This looks like the FINAL LIST - please upload it in Step 2") and nothing is changed.
+* The Coursera ZIPs are unzipped safely (only CSV files are read; paths inside the zip are never trusted).
+* The templates contain **headers only** (examples are on the READ ME sheet), so an untouched template can never import fake people.
+
+The system then matches the three datasets (Coursera email -> CNIC), replaces the previous snapshot atomically and recomputes everything.
+Chairs log in and see only their own region / council / area. National users also get **Data quality** (reconciliation with Coursera's totals, unmatched people, warnings).
 The Django **admin** is only for set-up: creating users and their *User scope*, correcting what counts as a Professional Certificate (*Specializations*), and manual *Identity overrides*.
 Guard-rails: a red banner appears on every page if an upload looks incomplete (missing Coursera account, no enrolment files, numbers not matching Coursera's totals), and an import is refused if it drops a Coursera account the previous import had (unless you tick "allow fewer accounts").
+Command line: `python manage.py import_gcc <files...>` does the same (files are sorted into the three types by content).
 
 ## Who sees what
 Create users in Admin, then **User scopes**: role + (region | local council | area).
@@ -58,6 +74,7 @@ Feeds the old workbook's own data through the engine: **18/18 national cards and
 |---|---|
 | `normalize.py` | CNIC / email / date cleaning (the join keys) |
 | `catalog.py` | regions, **which specializations are Professional Certificates**, bands |
+| `upload_check.py` / `templates_gen.py` / `datastore.py` | the upload page: friendly checks, downloadable templates, stored files |
 | `pipeline.py` | identity resolution, dedupe, consolidation, reconciliation with Coursera totals |
 | `metrics.py` | every KPI definition and chart aggregation |
 | `excel_parity.py` | reproduces the 2025 Excel cards from its own data |

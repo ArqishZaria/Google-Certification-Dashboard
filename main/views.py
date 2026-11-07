@@ -8,14 +8,15 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Case, IntegerField, Q, Value, When
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from . import exports, reports, services
 from .logic import catalog as C
 from .logic import metrics as M
-from .models import (Area, DataImport, DataIssue, LocalCouncil, Participant, Region, Registration, SourceFile, Specialization)
+from .logic import templates_gen, upload_check
+from .models import (Area, DataImport, DataIssue, LocalCouncil, Participant, Region, Registration, Specialization)
 
 GROUP_TITLES = {"region": "Region", "council_label": "Local council", "area_label": "Area (Jamatkhana)"}
 
@@ -242,72 +243,84 @@ def data_quality(request, eff):
         sev=sev, unreviewed=unreviewed, recon_bad=recon_bad, catalogue=Specialization.objects.all()))
 
 
+IMPORT_SLOTS = [
+    {"key": "master", "number": 1, "field": "master_file", "multiple": False, "accept": ".xlsx,.xlsm",
+     "title": "Master registration sheet",
+     "what": "The list of EVERYONE who filled in the Google Career Certificates registration form.",
+     "where": "Export the Google Form responses to Excel and save as .xlsx.",
+     "type": "One Excel file (.xlsx)",
+     "needs": "Columns: id, Full Name, CNIC Number, Email Address (Course Access), Residing Region",
+     "template_label": "Download Master template (.xlsx)"},
+    {"key": "final", "number": 2, "field": "final_file", "multiple": False, "accept": ".xlsx,.xlsm",
+     "title": "Final list (shortlisted candidates)",
+     "what": "The candidates your regional teams shortlisted and issued a licence to. One tab per region.",
+     "where": "The Final list workbook your team maintains. Tabs: Southern, Central, Gilgit, Hunza, IP, GY, Upper Chitral, LC, National.",
+     "type": "One Excel file (.xlsx)",
+     "needs": "On every tab: License Issued Category, Full Name, Email Address (Course Access), CNIC Number",
+     "template_label": "Download Final list template (.xlsx)"},
+    {"key": "coursera", "number": 3, "field": "coursera_files", "multiple": True, "accept": ".zip,.csv",
+     "title": "Coursera export (ZIP files)",
+     "what": "The learning data downloaded from Coursera: who holds a licence and how far each person has got.",
+     "where": "Download the export from EACH of your Coursera accounts (you have 2). Each download is a ZIP - do not unzip or rename it. Select both ZIPs together.",
+     "type": "One ZIP per Coursera account (select several at once)",
+     "needs": "Inside each ZIP: Program Activity and Specialisation Activity files (others are used if present)",
+     "template_label": "Download guide (what is inside the ZIP)"},
+]
+UPLOAD_TYPES = [("all", "Everything - first time, or a full refresh (all 3 files)"),
+                ("coursera", "Only the new Coursera export (ZIP) - the usual weekly update"),
+                ("final", "Only the Final list"),
+                ("master", "Only the Master registration sheet")]
+
+
 @login_required
 def import_data(request):
     if not is_staff_user(request.user):
         return render(request, "main/no_access.html", status=403)
     eff = services.effective(request.user, {}) or {"label": "National", "level": "national", "q": Q(), "group_key": "region"}
+    upload_type = request.POST.get("upload_type", "all") if request.method == "POST" else "all"
     if request.method == "POST":
-        files = request.FILES.getlist("files")
-        if not files:
-            messages.error(request, "Please choose the files to import.")
-        else:
-            with tempfile.TemporaryDirectory() as tmp:
-                pairs = []
-                for i, f in enumerate(files):
-                    safe = os.path.basename(f.name)
-                    os.makedirs(os.path.join(tmp, str(i)), exist_ok=True)      # same file name twice must not overwrite
-                    path = os.path.join(tmp, str(i), safe)
-                    with open(path, "wb") as out:
-                        for chunk in f.chunks():
-                            out.write(chunk)
-                    pairs.append((path, safe))
+        errors, warnings = [], []
+        with tempfile.TemporaryDirectory() as tmp:
+            prep = upload_check.prepare_uploads(request.FILES.get("master_file"), request.FILES.get("final_file"),
+                                                request.FILES.getlist("coursera_files"), tmp)
+            errors, warnings = prep["errors"], prep["warnings"]
+            if not errors:
                 try:
-                    imp, stored, skipped = services.add_source_files(pairs, request.user, allow_fewer_accounts=bool(request.POST.get("allow_fewer")))
+                    imp = services.import_components(request.user, master=prep["master"], final=prep["final"],
+                                                     coursera=prep["coursera"] or None,
+                                                     allow_fewer_accounts=bool(request.POST.get("allow_fewer")))
                 except ValueError as e:
-                    messages.error(request, str(e))
-                except Exception as e:  # nothing is changed: add_source_files is atomic
-                    messages.error(request, f"Import failed and NOTHING was changed: {e}")
+                    errors.append(str(e))
+                except Exception as e:  # nothing is changed: run_import is atomic
+                    errors.append(f"Import failed and NOTHING was changed: {e}")
                 else:
-                    for name, why in skipped:
-                        messages.warning(request, f"{name}: skipped - {why}.")
-                    if imp:
-                        messages.success(request, f"Added {len(stored)} file(s). Data as of {imp.as_of:%d %b %Y}: {imp.stats.get('participants_licensed', 0)} licensed participants.")
-                        return redirect("data_quality")
-                    if stored:
-                        messages.info(request, f"Added {len(stored)} file(s). The dashboard will update once all required files are loaded (see the checklist below).")
-                    return redirect("import_data")
-    return render(request, "main/import.html", base_ctx(request, eff, **import_context()))
+                    for w in warnings:
+                        messages.warning(request, w)
+                    messages.success(request, f"Import complete. Data as of {imp.as_of:%d %b %Y}: {imp.stats.get('participants_licensed', 0)} licensed participants.")
+                    return redirect("data_quality")
+        for e in errors:
+            messages.error(request, e)
+        for w in warnings:
+            messages.warning(request, w)
+    stored = services.data_store().info()
+    slots = []
+    for slot in IMPORT_SLOTS:
+        files = stored.get(slot["key"], [])
+        slots.append({**slot, "current_count": len(files), "current_names": [f["name"] for f in files][:3],
+                      "current_at": max((f["saved_at"] for f in files), default=None)})
+    return render(request, "main/import.html", base_ctx(request, eff, slots=slots, upload_types=UPLOAD_TYPES, upload_type=upload_type))
 
 
-def import_context():
-    loaded = list(SourceFile.objects.defer("content"))
-    kinds = {f.kind for f in loaded}
-    checklist = [("Registration master workbook", "master" in kinds),
-                 ("Final list workbook", "final" in kinds),
-                 ("Coursera Program Activity CSV (at least one account)", "program" in kinds)]
-    return {"source_files": loaded, "checklist": checklist,
-            "kind_labels": {"master": "Registration master", "final": "Final list", "program": "Coursera Program", "spec": "Coursera Specialisation",
-                            "course": "Coursera Course", "summary": "Coursera totals"}}
-
-
-@require_POST
 @login_required
-def remove_source(request, pk):
+def import_template(request, kind):
     if not is_staff_user(request.user):
         return render(request, "main/no_access.html", status=403)
-    try:
-        f, imp = services.remove_source_file(pk, request.user)
-    except SourceFile.DoesNotExist:
-        messages.error(request, "That file was already removed.")
-    except Exception as e:
-        messages.error(request, f"Could not remove the file; NOTHING was changed: {e}")
-    else:
-        if imp:
-            messages.success(request, f"Removed {f.name}. Dashboard recalculated from the remaining files.")
-        else:
-            messages.warning(request, f"Removed {f.name}. A required file is now missing, so the dashboard is empty until it is uploaded again.")
-    return redirect("import_data")
+    if kind not in templates_gen.TEMPLATES:
+        raise Http404("Unknown template")
+    filename, build, content_type = templates_gen.TEMPLATES[kind]
+    resp = HttpResponse(build(), content_type=content_type)
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
 
 
 @require_POST

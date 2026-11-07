@@ -11,7 +11,7 @@ from . import normalize as N
 # Coursera enterprise export file names look like:
 #   Program_Activity_gwg-ent-akepb-ii_-_CourseraEnterpriseExport_2026-09-16_05-42-47_UTC.csv
 _COURSERA_NAME = re.compile(
-    r"^(?P<kind>.+?)[_ ](?P<acct>gwg-ent-.+?)[_ ]-[_ ]CourseraEnterpriseExport[_ ](?P<date>\d{4}-\d{2}-\d{2})[_ ]",
+    r"^(?P<kind>.+?)_(?P<acct>gwg-ent-.+?)_-_CourseraEnterpriseExport_(?P<date>\d{4}-\d{2}-\d{2})_",
     re.I,
 )
 
@@ -59,7 +59,7 @@ def identify_coursera_file(filename, headers):
             break
     if kind == "summary" and not any(h in hs for h in ("Business Unit",)):
         # Activity_By_City / Country exports duplicate the same totals - only the Business Unit one is used
-        if m and not m.group("kind").lower().replace(" ", "_").startswith("activity_by_business_unit"):
+        if m and not m.group("kind").lower().startswith("activity_by_business_unit"):
             kind = "summary_dup"
     return kind, acct, as_of
 
@@ -117,3 +117,23 @@ def looks_like_final_list(sheets):
         if rows and "License Issued Category" in rows[0] and "Full Name" in rows[0]:
             hits[name] = rows
     return hits
+
+
+def read_xlsx_headers(path_or_file):
+    """-> {sheet_name: [header, ...]} using only the first non-empty row of each sheet (works for empty sheets)."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path_or_file, read_only=True, data_only=True)
+    out = {}
+    try:
+        for ws in wb.worksheets:
+            hdr = []
+            for values in ws.iter_rows(values_only=True):
+                if all(v is None or (isinstance(v, str) and not v.strip()) for v in values):
+                    continue
+                hdr = [N.clean_text(h) for h in values if N.clean_text(h)]
+                break
+            out[ws.title] = hdr
+    finally:
+        wb.close()
+    return out

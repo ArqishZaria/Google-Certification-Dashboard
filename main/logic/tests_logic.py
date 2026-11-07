@@ -436,5 +436,254 @@ class ReconcileTests(unittest.TestCase):
         self.assertTrue(next(c for c in checks if c["label"].startswith("Total course"))["ok"])
 
 
+
+# ---------------------------------------------------------------- upload page: templates, checks, store, flow
+def _write(path, data):
+    with open(path, "wb") as fh:
+        fh.write(data)
+
+
+def _xlsx(path, sheets):
+    from openpyxl import Workbook
+    wb = Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for r in rows:
+            ws.append(r)
+    wb.save(path)
+
+
+def _csv(path, rows):
+    import csv
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+
+
+def _zip(path, files):
+    import zipfile
+    with zipfile.ZipFile(path, "w") as z:
+        for arcname, src in files.items():
+            if isinstance(src, bytes):
+                z.writestr(arcname, src)
+            else:
+                z.write(src, arcname)
+
+
+class FakeUpload:
+    """Stands in for Django's UploadedFile: has .name and .chunks()."""
+    def __init__(self, path):
+        self.name, self._path = path.replace("\\", "/").split("/")[-1], path
+
+    def chunks(self):
+        with open(self._path, "rb") as fh:
+            yield fh.read()
+
+
+def build_upload_files(tmp):
+    """A tiny but complete set of the three upload types. -> (master.xlsx, final.xlsx, [coursera zip path])"""
+    import os
+    m = [master_row(1, "4210100000001", "a@x.com"), master_row(2, "7140100000002", "b@x.com", region="Hunza Region")]
+    _xlsx(os.path.join(tmp, "master.xlsx"), {"Certificate Applications": [list(m[0].keys())] + [list(r.values()) for r in m]})
+    hdr = ["id", "License Issued Category", "Full Name", "Email Address (Course Access)", "CNIC Number", "Gender"]
+    _xlsx(os.path.join(tmp, "final.xlsx"), {"Southern": [hdr, [1, "Southern", "Person", "a@x.com", "4210100000001", "Male"]],
+                                           "Hunza": [hdr, [2, "Hunza", "Person B", "b@x.com", "7140100000002", "Male"]]})
+    suffix = "gwg-ent-testacct_-_CourseraEnterpriseExport_2026-09-16_05-42-47_UTC.csv"
+    files = {}
+    for kind, rows in (("Program_Activity", [prog_row("a@x.com", "4210100000001"), prog_row("b@x.com", None, "INVITED", "AKEPB - Hunza (Male)")]),
+                       ("Specialisation_Activity", [spec_row("a@x.com", done="9", total="9", completed="Yes")])):
+        p = os.path.join(tmp, f"{kind}_{suffix}")
+        _csv(p, rows)
+        files["export/" + os.path.basename(p)] = p
+    files["notes.pdf"] = b"not a csv"
+    z = os.path.join(tmp, "coursera.zip")
+    _zip(z, files)
+    return os.path.join(tmp, "master.xlsx"), os.path.join(tmp, "final.xlsx"), z
+
+
+class TemplateTests(unittest.TestCase):
+    def test_master_template_has_the_real_form_headers_and_no_data(self):
+        import os, tempfile
+        from . import readers as R, templates_gen as T, upload_check as U
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "t.xlsx")
+        _write(p, T.master_template_bytes())
+        self.assertEqual(R.read_xlsx_headers(p)[T.MASTER_SHEET], T.MASTER_HEADERS)
+        r = U.check_master(p)                                   # an untouched template must never import anything
+        self.assertFalse(r["ok"])
+        self.assertIn("no registrations", " ".join(r["errors"]))
+
+    def test_filled_templates_pass_and_import(self):
+        import os, tempfile
+        from openpyxl import load_workbook
+        from . import templates_gen as T, upload_check as U
+        d = tempfile.mkdtemp()
+        mp, fp = os.path.join(d, "m.xlsx"), os.path.join(d, "f.xlsx")
+        _write(mp, T.master_template_bytes())
+        wb = load_workbook(mp)
+        ws = wb[T.MASTER_SHEET]
+        row = {"id": 1, "Full Name": "A B", "Email Address (Course Access)": "a@x.com", "CNIC Number": "4210112345671", "Residing Region": "Southern Region"}
+        ws.append([row.get(h) for h in T.MASTER_HEADERS])
+        wb.save(mp)
+        self.assertTrue(U.check_master(mp)["ok"])
+        _write(fp, T.final_template_bytes())
+        wb = load_workbook(fp)
+        wb["Southern"].append([1, "Southern", "A B", "a@x.com", "4210112345671", "Male", None])
+        wb.save(fp)
+        r = U.check_final(fp)
+        self.assertTrue(r["ok"], r["errors"])
+        self.assertEqual(r["rows"], 1)
+
+    def test_coursera_guide_zip_cannot_be_uploaded_by_mistake(self):
+        import os, tempfile
+        from . import templates_gen as T, upload_check as U
+        d = tempfile.mkdtemp()
+        zp = os.path.join(d, "g.zip")
+        _write(zp, T.coursera_template_zip_bytes())
+        csvs, notes = U.safe_extract_zip(zp, os.path.join(d, "x"))
+        r = U.check_coursera(csvs, notes)
+        self.assertFalse(r["ok"])                                # header-only files: no licences
+
+
+class UploadCheckTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+        self.master, self.final, self.zip = build_upload_files(self.tmp)
+
+    def test_files_in_the_right_boxes_pass(self):
+        from . import upload_check as U
+        self.assertTrue(U.check_master(self.master)["ok"])
+        self.assertTrue(U.check_final(self.final)["ok"])
+
+    def test_wrong_box_is_named_in_plain_words(self):
+        from . import upload_check as U
+        self.assertIn("FINAL LIST", " ".join(U.check_master(self.final)["errors"]))
+        self.assertIn("MASTER", " ".join(U.check_final(self.master)["errors"]))
+
+    def test_bad_file_types(self):
+        import os
+        from . import upload_check as U
+        d = os.path.join(self.tmp, "x.docx")
+        _write(d, b"x")
+        self.assertFalse(U.check_master(d)["ok"])
+        bad = os.path.join(self.tmp, "bad.xlsx")
+        _write(bad, b"not excel")
+        self.assertFalse(U.check_master(bad)["ok"])
+        self.assertFalse(U.check_final(bad)["ok"])
+
+    def test_unknown_final_list_tab_is_skipped_with_a_warning(self):
+        import os
+        from . import upload_check as U
+        hdr = ["License Issued Category", "Full Name", "Email Address (Course Access)", "CNIC Number"]
+        p = os.path.join(self.tmp, "f2.xlsx")
+        _xlsx(p, {"Southern ": [hdr, ["S", "A", "a@x.com", "4210100000001"]], "Typo tab": [hdr, ["S", "B", "b@x.com", "4210100000002"]]})
+        r = U.check_final(p)
+        self.assertTrue(r["ok"])
+        self.assertTrue(any("SKIPPED" in w for w in r["warnings"]))     # and the trailing space in 'Southern ' is tolerated
+
+    def test_coursera_requires_program_and_specialisation_and_account_in_name(self):
+        import os, shutil
+        from . import upload_check as U
+        csvs, _ = U.safe_extract_zip(self.zip, os.path.join(self.tmp, "z"))
+        self.assertTrue(U.check_coursera(csvs)["ok"])
+        only_prog = [c for c in csvs if "Program_Activity" in c]
+        self.assertIn("Specialisation", " ".join(U.check_coursera(only_prog)["errors"]))
+        renamed = os.path.join(self.tmp, "renamed.csv")
+        shutil.copy(only_prog[0], renamed)
+        self.assertIn("name was changed", " ".join(U.check_coursera([renamed])["errors"]))
+        dup = os.path.join(self.tmp, "dup", os.path.basename(only_prog[0]))
+        os.makedirs(os.path.dirname(dup))
+        shutil.copy(only_prog[0], dup)
+        self.assertIn("Two", " ".join(U.check_coursera(only_prog + [dup])["errors"]))
+
+    def test_zip_slip_and_junk_entries_are_harmless(self):
+        import os
+        from . import upload_check as U
+        evil = os.path.join(self.tmp, "evil.zip")
+        _zip(evil, {"../../escape.csv": b"a\n1", "__MACOSX/._x.csv": b"x", "ok/Program_Activity_gwg-ent-x_-_CourseraEnterpriseExport_2026-09-16_05-42-47_UTC.csv": b"Name,Email,Member State,# Enrolled Courses\nA,a@x.com,MEMBER,0"})
+        out = os.path.join(self.tmp, "out")
+        csvs, notes = U.safe_extract_zip(evil, out)
+        self.assertTrue(all(os.path.abspath(c).startswith(os.path.abspath(out)) for c in csvs))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "escape.csv")))
+        with self.assertRaises(U.UploadError):
+            U.safe_extract_zip(self.master, os.path.join(self.tmp, "m"))        # an .xlsx is not a Coursera zip of CSVs
+
+    def test_zip_with_too_many_files_is_refused(self):
+        import os
+        from . import upload_check as U
+        p = os.path.join(self.tmp, "many.zip")
+        _zip(p, {f"f{i}.csv": b"a\n" for i in range(U.MAX_ZIP_FILES + 2)})
+        with self.assertRaises(U.UploadError):
+            U.safe_extract_zip(p, os.path.join(self.tmp, "many"))
+
+
+class DataStoreTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from . import datastore as D
+        self.tmp = tempfile.mkdtemp()
+        self.master, self.final, self.zip = build_upload_files(self.tmp)
+        from . import upload_check as U
+        self.csvs, _ = U.safe_extract_zip(self.zip, self.tmp + "/z")
+        self.store = D.DataStore(self.tmp + "/store")
+
+    def test_first_import_needs_all_three_then_one_slot_can_be_refreshed(self):
+        from . import datastore as D
+        with self.assertRaises(D.MissingUpload):
+            with self.store.staging(master=self.master):
+                pass
+        with self.store.staging(self.master, self.final, self.csvs) as st:
+            st.commit()
+        self.assertEqual({k: len(v) for k, v in self.store.info().items()}, {"master": 1, "final": 1, "coursera": 2})
+        with self.store.staging(coursera=self.csvs) as st:                      # master + final come from the store
+            self.assertEqual(len(st.paths), 4)
+            self.assertEqual(st.provided, {"coursera"})
+
+    def test_failed_import_leaves_the_store_untouched(self):
+        import os
+        with self.store.staging(self.master, self.final, self.csvs) as st:
+            st.commit()
+        before = {k: [f["name"] for f in v] for k, v in self.store.info().items()}
+        with self.assertRaises(RuntimeError):
+            with self.store.staging(master=self.final):                        # would replace the master...
+                raise RuntimeError("import failed")                             # ...but the import failed
+        self.assertEqual(before, {k: [f["name"] for f in v] for k, v in self.store.info().items()})
+        self.assertEqual([p for p in os.listdir(self.tmp + "/store") if p.startswith(".")], [])
+
+
+class UploadFlowTests(unittest.TestCase):
+    """The exact code path of the upload page, with fake uploads."""
+
+    def test_full_flow_matches_the_data(self):
+        import os, tempfile
+        from . import datastore as D, loader, upload_check as U
+        tmp = tempfile.mkdtemp()
+        master, final, z = build_upload_files(tmp)
+        work = tempfile.mkdtemp()
+        prep = U.prepare_uploads(FakeUpload(master), FakeUpload(final), [FakeUpload(z)], work)
+        self.assertEqual(prep["errors"], [])
+        store = D.DataStore(tmp + "/store")
+        with store.staging(prep["master"], prep["final"], prep["coursera"]) as st:
+            src, _ = loader.load_sources(st.paths)
+            ds = P.build(src)
+            st.commit()
+        self.assertEqual(len(ds["participants"]), 2)
+        a = next(p for p in ds["participants"] if p["email"] == "a@x.com")
+        self.assertEqual((a["status"], a["region"]), ("COMPLETED", "Southern"))
+        self.assertTrue(any("notes.pdf" in n for n in prep["notes"]))              # the junk file was ignored, and the user is told
+
+    def test_wrong_files_block_the_import_and_say_why(self):
+        import tempfile
+        from . import upload_check as U
+        tmp = tempfile.mkdtemp()
+        master, final, z = build_upload_files(tmp)
+        prep = U.prepare_uploads(FakeUpload(final), FakeUpload(master), [], tempfile.mkdtemp())
+        self.assertEqual(len(prep["errors"]), 2)
+        self.assertTrue(all(e.startswith("Step") for e in prep["errors"]))
+        self.assertEqual(U.prepare_uploads(None, None, [], tempfile.mkdtemp())["errors"], ["Please choose at least one file to upload."])
+
 if __name__ == "__main__":
     unittest.main()

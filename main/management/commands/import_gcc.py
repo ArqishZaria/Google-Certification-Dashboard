@@ -4,6 +4,7 @@ import os
 from django.core.management.base import BaseCommand, CommandError
 
 from main import services
+from main.logic import loader
 
 
 class Command(BaseCommand):
@@ -21,8 +22,10 @@ class Command(BaseCommand):
         paths = [p for p in paths if os.path.isfile(p)]
         if not paths:
             raise CommandError("No files found.")
+        slots = loader.classify_paths(paths)
         try:
-            imp = services.run_import(paths, allow_fewer_accounts=opts["allow_fewer_accounts"])
+            imp = services.import_components(master=slots["master"], final=slots["final"], coursera=slots["coursera"],
+                                             allow_fewer_accounts=opts["allow_fewer_accounts"])
         except ValueError as e:
             raise CommandError(str(e))
         for f in imp.files:
