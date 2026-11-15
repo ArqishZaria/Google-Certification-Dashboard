@@ -33,6 +33,15 @@ def _max(values):
     return max(vals) if vals else None
 
 
+def _unique_courses(courses):
+    """{course key: completed?} - a course counts ONCE per participant even if it appears under several licences."""
+    out = {}
+    for i, c in enumerate(courses):
+        k = c.get("course_id") or ("row", i)
+        out[k] = out.get(k, False) or bool(c["completed"])
+    return out
+
+
 def _min(values):
     vals = [v for v in values if v is not None]
     return min(vals) if vals else None
@@ -135,8 +144,8 @@ def derive_participant(licenses, specs, courses, as_of: date, inactivity_days=DE
         "short_enrolled": len({s["family"] for s in shorts}),
         "short_completed": len({s["family"] for s in shorts if s["completed"]}),
         "specs_enrolled": len({s["family"] for s in specs}),
-        "courses_enrolled": len(courses),
-        "courses_completed": sum(1 for c in courses if c["completed"]),
+        "courses_enrolled": len(_unique_courses(courses)),
+        "courses_completed": sum(1 for done in _unique_courses(courses).values() if done),
         "learning_hours": round(sum((l.get("learning_hours") or 0.0) for l in licenses), 2),
         "last_activity": last_activity,
         "first_enrolled_at": first_enrolled_at,

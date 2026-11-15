@@ -36,14 +36,14 @@ def local(ctx):
 
 PARTICIPANT_COLS = ["Name", "CNIC", "Email", "Phone", "Gender", "Region", "Local council", "Area", "License", "Status",
                     "Professional Certificate", "PC progress %", "PC completed", "AI courses completed", "Courses completed",
-                    "Learning hours", "Last activity", "Days inactive"]
+                    "Learning hours", "Last activity", "Days inactive", "Courses enrolled (unique)"]
 
 
 def _prow(p):
     return [p["name"], p["cnic"] or "", p["email"], p["phone"], p["gender"], p["region"], p["local_council"], p["area"],
             C.LICENSE_LABELS.get(p["license_state"], p["license_state"]), C.STATUS_LABELS.get(p["status"], p["status"]),
             p["pc_family"] or "", p["pc_progress"] if p["pc_progress"] is not None else "", "Yes" if p["pc_completed"] else "No",
-            p["ai_completed"], p["courses_completed"], p["learning_hours"], p["last_activity"], p["days_inactive"] if p["days_inactive"] is not None else ""]
+            p["ai_completed"], p["courses_completed"], p["learning_hours"], p["last_activity"], p["days_inactive"] if p["days_inactive"] is not None else "", p["courses_enrolled"]]
 
 
 def participant(ctx):
@@ -99,13 +99,26 @@ def ai_courses(ctx):
 def excel_compatible(ctx):
     """The 2025 Excel dashboard cards per group, with that workbook's definitions (see Methodology)."""
     rows = M.legacy_group_table(ctx["parts"], ctx["specs"], "region", C.REGION_ORDER)
-    tot = M.legacy_kpis(ctx["parts"], ctx["specs"])
+    tot = M.legacy_kpis([p for p in ctx["parts"] if p["region"] != "National"], ctx["specs"])
     tot["name"] = "TOTAL"
     cols = ["Region", "Candidates invited", "Started any one course", "Not started any course", "Courses registered", "Candidates completed 1 course",
             "Total courses completed", "Candidates >50%", "Courses >50%", "Candidates <50%", "Courses <50%", "Candidates 0%", "Courses 0%"]
     f = lambda r: [r["name"], r["invited"], r["started"], r["not_started"], r["courses_registered"], r["completed_candidates"], r["courses_completed"],
                    r["gt50_candidates"], r["gt50_courses"], r["lt50_candidates"], r["lt50_courses"], r["zero_candidates"], r["zero_courses"]]
     return cols, [f(r) for r in rows] + [f(tot)]
+
+
+def courses_report(ctx):
+    """One row per participant per individual course (a course appears once per participant)."""
+    parts = {p["key"]: p for p in ctx["parts"]}
+    rows = []
+    for c in ctx.get("courses", []):
+        p = parts.get(c["participant_key"])
+        if p:
+            rows.append([p["name"], p["email"], p["region"], p["local_council"], p["area"], c["name"], c["course_type"],
+                         round(c["progress"] or 0, 1), "Yes" if c["completed"] else "No", c["enrolled_at"], c["last_activity_at"], c["completed_at"], c["hours"]])
+    rows.sort(key=lambda r: (r[2] or "", r[0] or "", r[5] or ""))
+    return ["Name", "Email", "Region", "Local council", "Area", "Course", "Type", "Progress %", "Completed", "Enrolled on", "Last activity", "Completed on", "Hours"], rows
 
 
 def professional_certificates(ctx):
@@ -125,6 +138,7 @@ REPORTS = {
     "inactive": ("Inactive Learner Report", "Started learners with no recent activity.", inactive),
     "excel-compatible": ("Excel-compatible Report", "Region table with the 2025 Excel dashboard definitions.", excel_compatible),
     "ai-courses": ("AI Course Report", "AI / Essentials course enrolments and completions.", ai_courses),
+    "courses": ("Individual Course Report", "One row per participant per individual course (unique).", courses_report),
     "professional-certificates": ("Professional Certificate Report", "Enrolment, completion and progress per certificate.", professional_certificates),
 }
 
