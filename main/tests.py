@@ -179,3 +179,19 @@ class UploadPageTests(TestCase):
         self.assertRedirects(r, reverse("data_quality"))
         self.assertEqual(Participant.objects.count(), 2)
         self.assertContains(self.client.get(reverse("import_data")), "Currently loaded")
+
+
+class ResetCommandTests(TestCase):
+    def test_reset_removes_imported_data_but_keeps_users(self):
+        from django.core.management import call_command
+        from .models import DataImport
+        tmp = tempfile.mkdtemp()
+        services.run_import(make_files(tmp))
+        User.objects.create_user("keep", password="pw")
+        self.assertGreater(Participant.objects.count(), 0)
+        with self.assertRaises(Exception):
+            call_command("reset_gcc_data")                      # needs --yes
+        self.assertGreater(Participant.objects.count(), 0)
+        call_command("reset_gcc_data", "--yes", verbosity=0)
+        self.assertEqual((Participant.objects.count(), DataImport.objects.count()), (0, 0))
+        self.assertTrue(User.objects.filter(username="keep").exists())

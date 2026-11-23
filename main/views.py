@@ -293,7 +293,7 @@ def import_data(request):
     upload_type = request.POST.get("upload_type", "all") if request.method == "POST" else "all"
     if request.method == "POST":
         errors, warnings = [], []
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             prep = upload_check.prepare_uploads(request.FILES.get("master_file"), request.FILES.get("final_file"),
                                                 request.FILES.getlist("coursera_files"), tmp)
             errors, warnings = prep["errors"], prep["warnings"]
