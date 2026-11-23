@@ -8,7 +8,7 @@
 <div class="kpis">
   <div class="kpi"><div class="v">{{ k.registrations|fmt_num }}</div><div class="l">Total registrations</div></div>
   <div class="kpi"><div class="v">{{ k.screened|fmt_num }}</div><div class="l">Screened (shortlisted)</div></div>
-  <div class="kpi"><div class="v">{{ k.licensed|fmt_num }}</div><div class="l">Licences issued</div><div class="n">{{ k.licensed_not_shortlisted }} outside shortlist | {{ k.national_staff }} National Council staff</div></div>
+  <div class="kpi"><div class="v">{{ k.licensed|fmt_num }}</div><div class="l">Licences issued</div><div class="n">{% if outside %}{{ outside|fmt_num }} more on Coursera are not on the Final list (not counted){% else %}Final-list seats with a Coursera licence{% endif %}</div></div>
   <div class="kpi good"><div class="v">{{ k.accepted|fmt_num }}</div><div class="l">Licences accepted</div><div class="n">{{ k.acceptance_rate }}% utilisation</div></div>
   <div class="kpi warn"><div class="v">{{ k.pending|fmt_num }}</div><div class="l">Pending acceptance</div></div>
   <div class="kpi"><div class="v">{{ k.active|fmt_num }}</div><div class="l">Active learners</div><div class="n">activity in last {{ inactivity_days }} days</div></div>
@@ -28,7 +28,7 @@
   &nbsp; <a href="?region=National">Open National staff view &rarr;</a></p></div>{% endif %}
 <div class="grid g2">
   <div class="card"><h2>Participant funnel</h2><div class="chart"><canvas id="c_funnel"></canvas></div>
-    <p class="note">"Licence issued" can exceed "Screened" when licences were issued to people who are not on the shortlist ({{ k.licensed_not_shortlisted }} here) - see the Data quality page.</p></div>
+    <p class="note">"Screened" is the Final-list seats. "Licences issued" counts seats that have a matching Coursera licence, so it can be lower when a licence is under a different email or CNIC - see the Data quality page.</p></div>
   <div class="card"><h2>Where every participant stands today</h2><div class="chart"><canvas id="c_status"></canvas></div>
     <p class="note">Each participant appears in exactly one slice.</p></div>
 </div>
