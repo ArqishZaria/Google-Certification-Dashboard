@@ -307,13 +307,11 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("Possible match", msg)
         self.assertIn("LICENSE_NOT_SHORTLISTED", self.codes(ds))
 
-    def test_duplicate_person_one_participant_two_licences(self):
+    def test_same_cnic_two_emails_are_two_seats_each_with_its_own_licence(self):
         ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com"), final_row(self.C1, "a2@x.com")],
                  [prog_row("a@x.com", self.C1), prog_row("a2@x.com", None, state="INVITED")])
-        self.assertEqual(len(ds["participants"]), 1)
-        self.assertEqual(ds["participants"][0]["license_count"], 2)
-        self.assertEqual(ds["participants"][0]["license_state"], "ACCEPTED")
-        self.assertIn("MULTIPLE_LICENSES", self.codes(ds))
+        self.assertEqual(sorted(p["license_state"] for p in ds["participants"]), ["ACCEPTED", "PENDING"])
+        self.assertTrue(all(p["license_count"] == 1 and p["shortlisted"] for p in ds["participants"]))
 
     def test_orphan_licence_is_flagged_not_dropped(self):
         ds = run([], [], [prog_row("ghost@x.com")])
@@ -348,24 +346,59 @@ class PipelineTests(unittest.TestCase):
         rows = M.group_table(ds["participants"], ds["registrations"], "region")
         self.assertEqual(sum(r["registrations"] for r in rows), 3)
 
-    def test_region_is_residence_not_programme_and_national_staff_stay_in_their_region(self):
+    def test_region_is_the_final_list_allocation_not_residence(self):
         master = [master_row(1, self.C1, "a@x.com", region="Hunza Region")]
-        ds = run(master, [final_row(self.C1, "a@x.com")], [prog_row("a@x.com", self.C1, program="AKEPB - National Employee (Male)")])
+        ds = run(master, [final_row(self.C1, "a@x.com")], [prog_row("a@x.com", self.C1)])   # shortlisted on the Southern tab
         (p,) = ds["participants"]
-        self.assertEqual((p["region"], p["programme_region"]), ("Hunza", "National"))
-        self.assertEqual(ds["registrations"][0]["region"], "Hunza")
-        self.assertEqual(ds["registrations"][0]["programme_region"], "National")
-        self.assertNotIn("RESIDENCE_PROGRAMME_MISMATCH", self.codes(ds))   # National programme is expected to differ
+        self.assertEqual((p["region"], p["residing_region"]), ("Southern", "Hunza"))
+        self.assertIsNone(p["local_council"])                        # council/area only shown when living in that region
+        self.assertEqual(ds["registrations"][0]["region"], "Southern")
+        self.assertIn("RESIDENCE_ALLOCATION_MISMATCH", self.codes(ds))
 
-    def test_regional_programme_living_elsewhere_is_flagged(self):
-        master = [master_row(1, self.C1, "a@x.com", region="Southern Region")]
-        ds = run(master, [final_row(self.C1, "a@x.com")], [prog_row("a@x.com", self.C1, program="AKEPB - Hunza (Male)")])
+    def test_national_staff_are_their_own_region(self):
+        master = [master_row(1, self.C1, "a@x.com", region="Hunza Region")]
+        src = P.Sources(master_rows=master, final_sheets={"National ": [final_row(self.C1, "a@x.com")]},
+                        coursera={"acctA": {"program": [prog_row("a@x.com", self.C1, program="AKEPB - National Employee (Male)")], "spec": [], "course": []}}, as_of=AS_OF)
+        ds = P.build(src)
+        (p,) = ds["participants"]
+        self.assertEqual((p["region"], p["programme_region"]), ("National", "National"))
+        self.assertEqual(ds["registrations"][0]["region"], "National")
+        rows = M.group_table(ds["participants"], ds["registrations"], "region")
+        self.assertEqual([r["name"] for r in rows], ["National"])
+
+    def test_programme_mismatch_is_flagged_and_final_list_wins(self):
+        ds = run([master_row(1, self.C1, "a@x.com", region="Southern Region")], [final_row(self.C1, "a@x.com")],
+                 [prog_row("a@x.com", self.C1, program="AKEPB - Hunza (Male)")])
         self.assertEqual(ds["participants"][0]["region"], "Southern")
-        self.assertIn("RESIDENCE_PROGRAMME_MISMATCH", self.codes(ds))
+        self.assertIn("REGION_MISMATCH", self.codes(ds))
 
-    def test_no_registration_falls_back_to_programme_region(self):
+    def test_person_listed_twice_in_final_list_counts_once(self):
+        ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com", "Aniya"), final_row(self.C1, "a@x.com", "Aniya Ali")],
+                 [prog_row("a@x.com", self.C1)])
+        self.assertEqual(len(ds["participants"]), 1)
+
+    def test_same_cnic_with_a_different_email_is_a_second_licence_seat(self):
+        ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com"), final_row(self.C1, "a2@x.com")],
+                 [prog_row("a@x.com", self.C1), prog_row("a2@x.com", self.C1)])
+        self.assertEqual(len(ds["participants"]), 2)
+        self.assertEqual([p["license_state"] for p in ds["participants"]].count("NONE"), 0)
+        self.assertIn("FINAL_MULTI_EMAIL", self.codes(ds))
+
+    def test_licence_outside_final_list_has_no_region(self):
+        ds = run([master_row(1, self.C1, "a@x.com")], [], [prog_row("a@x.com", self.C1)])
+        (p,) = ds["participants"]
+        self.assertFalse(p["shortlisted"])
+        self.assertIsNone(p["region"])
+
+    def test_no_registration_uses_the_final_list_region(self):
         ds = run([], [final_row(self.C1, "a@x.com")], [prog_row("a@x.com", self.C1, program="AKEPB - Hunza (Male)")])
-        self.assertEqual(ds["participants"][0]["region"], "Hunza")
+        self.assertEqual(ds["participants"][0]["region"], "Southern")
+
+    def test_course_counts_are_unique_per_participant(self):
+        r = M.derive_participant([lic()], [], [{"course_id": "c1", "completed": True, "enrolled_at": dt("2026-09-01T00:00:00"), "last_activity_at": dt("2026-09-10T00:00:00")},
+                                              {"course_id": "c1", "completed": False, "enrolled_at": dt("2026-09-01T00:00:00"), "last_activity_at": dt("2026-09-10T00:00:00")},
+                                              {"course_id": "c2", "completed": False, "enrolled_at": dt("2026-09-01T00:00:00"), "last_activity_at": dt("2026-09-10T00:00:00")}], AS_OF)
+        self.assertEqual((r["courses_enrolled"], r["courses_completed"], r["started"]), (2, 1, True))
 
     def test_bad_cnic_in_final_list_is_reported(self):
         ds = run([], [final_row("123", "a@x.com")], [])

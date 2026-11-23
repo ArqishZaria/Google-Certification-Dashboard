@@ -133,15 +133,18 @@ def build(src: Sources) -> dict:
         else:
             key = e["cnic"]
         p = persons.get(key)
+        if p is not None and e["cnic"] and e["email"] and e["email"] not in {x["email"] for x in p["entries"]}:
+            # Same CNIC, different licence email. Coursera issues licences per email, so each unique email is its own
+            # licence seat (this is how Southern reaches 468 licences issued).
+            issue(WARNING, "FINAL_MULTI_EMAIL", f"'{e['name']}' is listed with a different email for the same CNIC ({e['email']}). Counted as a separate licence seat because Coursera issues licences per email; check for a typo.", ref=key, pkey=key)
+            key = "EMAIL:" + e["email"]
+            p = persons.get(key)
         if p is None:
             persons[key] = p = _new_person(key, e["cnic"], e["name"], e["gender"], e["region"], True)
             p["entries"] = [e]
         else:
             p["entries"].append(e)
-            if e["email"] == p["entries"][0]["email"]:
-                issue(INFO, "FINAL_DUP_ROW", f"'{e['name']}' is listed twice in the shortlist with identical CNIC and email; counted once.", ref=key, pkey=key)
-            else:
-                issue(WARNING, "FINAL_MULTI_EMAIL", f"'{e['name']}' has several shortlist rows with different emails for the same CNIC (one person = one licence).", ref=key, pkey=key)
+            issue(INFO, "FINAL_DUP_ROW", f"'{e['name']}' is listed twice in the shortlist with identical CNIC and email; counted once.", ref=key, pkey=key)
             if e["region"] != p["entries"][0]["region"]:
                 issue(WARNING, "FINAL_MULTI_REGION", f"'{e['name']}' is shortlisted in more than one region sheet.", ref=key, pkey=key)
         for em in (e["email"], e["email_alt"]):
@@ -157,6 +160,8 @@ def build(src: Sources) -> dict:
     # link persons -> registration
     used_regs = {}
     for key, p in persons.items():
+        if p["cnic"] and key != p["cnic"] and p["cnic"] in persons:
+            continue    # extra licence seat of a person already linked to a registration
         reg, how = (reg_by_cnic.get(p["cnic"]) if p["cnic"] else None), "cnic"
         if reg is None:
             for em in sorted(p["emails"]):
@@ -362,14 +367,15 @@ def build(src: Sources) -> dict:
         sheet_region = ent0["region"] if ent0 else None
         programme = prog_regions[0] if prog_regions else sheet_region
         if prog_regions and sheet_region and prog_regions[0] != sheet_region:
-            issue(WARNING, "REGION_MISMATCH", f"{p['name']}: shortlist sheet region ({sheet_region}) differs from Coursera programme ({prog_regions[0]}). Coursera programme used.", ref=key, pkey=key)
+            issue(WARNING, "REGION_MISMATCH", f"{p['name']}: shortlist sheet region ({sheet_region}) differs from Coursera programme ({prog_regions[0]}). Final-list region used.", ref=key, pkey=key)
         residing = (reg or {}).get("residing_region")
-        # REGION = where the person lives (registration form), exactly as in the 2025 Excel and BRD s.5; the Region >
-        # Local council > Area hierarchy is residence-based. Fallback when there is no registration: the Coursera
-        # programme region (never 'National': National Council staff live in a region).
-        region = residing or (programme if programme != "National" else None)
-        if residing and programme and programme != "National" and residing != programme:
-            issue(WARNING, "RESIDENCE_PROGRAMME_MISMATCH", f"{p['name']}: lives in {residing} but holds a {programme} programme licence. Reported under {residing} (residence).", ref=key, pkey=key)
+        # REGION = the allocation in the Final list (the tab the person was shortlisted in). National Council staff
+        # (tab "National") are their own group and never part of a region. People who are not in the Final list have
+        # no region: they are not counted anywhere and are listed on the Data quality page instead.
+        region = sheet_region
+        home = bool(region and region != "National" and residing == region)
+        if region and region != "National" and residing and residing != region:
+            issue(INFO, "RESIDENCE_ALLOCATION_MISMATCH", f"{p['name']}: lives in {residing} but is allocated to {region} in the Final list. Counted under {region}; local council / area not shown.", ref=key, pkey=key)
         gender = (reg or {}).get("gender") or (ent0 or {}).get("gender") or next((l["program_gender"] for l in lics if l["program_gender"]), None) or p.get("gender")
         derived = M.derive_participant(
             licenses=[{k: l[k] for k in ("state", "removed", "invited_at", "joined_at", "last_activity_at", "learning_hours")} for l in lics],
@@ -381,7 +387,7 @@ def build(src: Sources) -> dict:
             "email": (best_lic["email"] if best_lic else (ent0["email"] if ent0 else (reg or {}).get("course_email"))),
             "phone": (reg or {}).get("mobile"), "gender": gender, "region": region, "programme_region": programme,
             "residing_region": residing,
-            "local_council": (reg or {}).get("local_council"), "area": (reg or {}).get("area"),
+            "local_council": (reg or {}).get("local_council") if home else None, "area": (reg or {}).get("area") if home else None,
             "shortlisted": bool(p["entries"]), "shortlist_sheet": ent0["sheet"] if ent0 else None,
             "issuance_note": next((e["note"] for e in p["entries"] if e["note"]), None),
             "preferred_label": (reg or {}).get("preferred_label") or (ent0 or {}).get("preferred_label"),
@@ -395,10 +401,15 @@ def build(src: Sources) -> dict:
             "accounts": sorted({l["account"] for l in lics}),
             **derived,
         })
-    # registrations: region = residing region (so regions always add up to the grand total); programme from the linked participant
+    # registrations: region = the linked participant's allocated region (National staff -> "National"); otherwise where the
+    # applicant lives. Local council / area are kept only when the person lives in the region they are counted under.
     prog_by_reg = {p["registration_form_id"]: p["programme_region"] for p in participants if p["registration_form_id"] is not None}
+    region_by_reg = {p["registration_form_id"]: p["region"] for p in participants if p["registration_form_id"] is not None and p["shortlisted"] and p["region"]}
     for r in regs:
-        r["region"] = r["residing_region"]
+        alloc = region_by_reg.get(r["form_id"])
+        r["region"] = alloc or r["residing_region"]
+        if alloc and alloc != r["residing_region"]:
+            r["local_council"] = r["area"] = None
         r["programme_region"] = prog_by_reg.get(r["form_id"])
 
     recon = reconcile(src)

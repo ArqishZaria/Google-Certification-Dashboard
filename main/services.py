@@ -178,7 +178,7 @@ def recompute_all():
             "completed": s.completed, "completed_at": s.completed_at, "enrolled_at": s.enrolled_at, "last_activity_at": s.last_activity_at})
     for c in CourseEnrollment.objects.all():
         course_by_p.setdefault(c.participant_id, []).append({
-            "completed": c.completed, "completed_at": c.completed_at, "enrolled_at": c.enrolled_at, "last_activity_at": c.last_activity_at})
+            "course_id": c.course_id, "completed": c.completed, "completed_at": c.completed_at, "enrolled_at": c.enrolled_at, "last_activity_at": c.last_activity_at})
     batch = []
     for p in Participant.objects.all():
         d = M.derive_participant(lic_by_p.get(p.id, []), spec_by_p.get(p.id, []), course_by_p.get(p.id, []), as_of, imp.inactivity_days)
@@ -241,7 +241,10 @@ def effective(user, params):
         group_key = "council_label"
     else:
         group_key = "region"
-    return {"q": base & req, "label": label, "level": level, "group_key": group_key}
+    if params.get("region") == "National":
+        group_key = "region"
+    # Only people on the Final list (the allocated seats) are counted; registrations are filtered by "q" alone.
+    return {"q": base & req, "pq": base & req & Q(shortlisted=True), "label": label, "level": level, "group_key": group_key}
 
 
 PART_FIELDS = [
@@ -286,9 +289,17 @@ def spec_dicts(participant_qs):
     } for r in rows]
 
 
+def course_dicts(participant_qs):
+    rows = CourseEnrollment.objects.filter(participant_id__in=participant_qs.values("id")).values(
+        "participant__key", "name", "course_type", "progress", "completed", "completed_at", "enrolled_at", "last_activity_at", "hours")
+    return [{"participant_key": r["participant__key"], "name": r["name"], "course_type": r["course_type"], "progress": r["progress"],
+             "completed": r["completed"], "completed_at": r["completed_at"], "enrolled_at": r["enrolled_at"],
+             "last_activity_at": r["last_activity_at"], "hours": r["hours"]} for r in rows]
+
+
 def load_scope_data(eff, extra_q=None):
     """-> (participants, registrations, spec rows, as_of) for the effective scope."""
-    pq = eff["q"] & (extra_q or Q())
+    pq = eff["pq"] & (extra_q or Q())
     parts_qs = Participant.objects.filter(pq)
     parts = participant_dicts(parts_qs)
     regs = registration_dicts(Registration.objects.filter(eff["q"]))

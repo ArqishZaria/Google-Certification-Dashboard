@@ -105,11 +105,24 @@ def dashboard(request, eff):
     parts, regs, specs, as_of = services.load_scope_data(eff)
     gk = eff["group_key"]
     order = C.REGION_ORDER if gk == "region" else None
+    nat = None
+    outside = 0
+    if not request.GET.get("region") and not request.GET.get("programme"):
+        outside = Participant.objects.filter(shortlisted=False).exclude(license_state="NONE").count()
+    if gk == "region" and not request.GET.get("region") and not request.GET.get("programme"):
+        # National Council staff are kept OUT of every regional figure and shown as their own block.
+        n_regs = sum(1 for r in regs if r["region"] == "National")
+        nat_parts = [p for p in parts if p["region"] == "National"]
+        if nat_parts or n_regs:
+            nat = M.kpis(nat_parts, n_regs)
+        parts = [p for p in parts if p["region"] != "National"]
+        regs = [r for r in regs if r["region"] != "National"]
+        specs = [s for s in specs if s.get("region") != "National"]
     pay = M.dashboard_payload(parts, regs, specs, as_of, gk, order)
     heat = pay["heatmap"]
     heat_rows = list(zip(heat["groups"], heat["matrix"]))
     return render(request, "main/dashboard.html", base_ctx(
-        request, eff, pay=pay, k=pay["kpis"], charts=chart_data(pay), heat=heat, heat_rows=heat_rows,
+        request, eff, pay=pay, k=pay["kpis"], nat=nat, outside=outside, charts=chart_data(pay), heat=heat, heat_rows=heat_rows,
         group_title=GROUP_TITLES[gk], inactivity_days=imp.inactivity_days, nrows=len(parts)))
 
 
@@ -151,7 +164,7 @@ def apply_participant_filters(qs, g):
 
 @scoped
 def participant_list(request, eff):
-    qs = apply_participant_filters(Participant.objects.filter(eff["q"]).select_related("region", "local_council", "area"), request.GET)
+    qs = apply_participant_filters(Participant.objects.filter(eff["pq"]).select_related("region", "local_council", "area"), request.GET)
     page = Paginator(qs.order_by("name", "id"), 50).get_page(request.GET.get("page"))
     keep = request.GET.copy()
     keep.pop("page", None)
@@ -165,7 +178,7 @@ def participant_list(request, eff):
 
 @scoped
 def participant_detail(request, eff, public_id):
-    p = get_object_or_404(Participant.objects.filter(eff["q"]).select_related("region", "local_council", "area", "registration"), public_id=public_id)
+    p = get_object_or_404(Participant.objects.filter(eff["pq"]).select_related("region", "local_council", "area", "registration"), public_id=public_id)
     return render(request, "main/participant_detail.html", base_ctx(
         request, eff, p=p, reg=p.registration, licenses=p.licenses.all(),
         specs=p.spec_enrollments.select_related("specialization").order_by("specialization__category", "-progress_pct"),
@@ -194,7 +207,7 @@ def report_index(request, eff):
 
 def _report_data(eff, slug):
     parts, regs, specs, as_of = services.load_scope_data(eff)
-    ctx = {"parts": parts, "regs": regs, "specs": specs, "as_of": as_of}
+    ctx = {"parts": parts, "regs": regs, "specs": specs, "as_of": as_of, "courses": services.course_dicts(Participant.objects.filter(eff["pq"]))}
     if slug.startswith("followup-"):
         key = slug[len("followup-"):]
         if key not in M.FOLLOWUP_LISTS:
@@ -280,7 +293,7 @@ def import_data(request):
     upload_type = request.POST.get("upload_type", "all") if request.method == "POST" else "all"
     if request.method == "POST":
         errors, warnings = [], []
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             prep = upload_check.prepare_uploads(request.FILES.get("master_file"), request.FILES.get("final_file"),
                                                 request.FILES.getlist("coursera_files"), tmp)
             errors, warnings = prep["errors"], prep["warnings"]
