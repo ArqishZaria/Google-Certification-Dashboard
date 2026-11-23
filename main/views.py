@@ -106,6 +106,9 @@ def dashboard(request, eff):
     gk = eff["group_key"]
     order = C.REGION_ORDER if gk == "region" else None
     nat = None
+    outside = 0
+    if not request.GET.get("region") and not request.GET.get("programme"):
+        outside = Participant.objects.filter(shortlisted=False).exclude(license_state="NONE").count()
     if gk == "region" and not request.GET.get("region") and not request.GET.get("programme"):
         # National Council staff are kept OUT of every regional figure and shown as their own block.
         n_regs = sum(1 for r in regs if r["region"] == "National")
@@ -119,7 +122,7 @@ def dashboard(request, eff):
     heat = pay["heatmap"]
     heat_rows = list(zip(heat["groups"], heat["matrix"]))
     return render(request, "main/dashboard.html", base_ctx(
-        request, eff, pay=pay, k=pay["kpis"], nat=nat, charts=chart_data(pay), heat=heat, heat_rows=heat_rows,
+        request, eff, pay=pay, k=pay["kpis"], nat=nat, outside=outside, charts=chart_data(pay), heat=heat, heat_rows=heat_rows,
         group_title=GROUP_TITLES[gk], inactivity_days=imp.inactivity_days, nrows=len(parts)))
 
 

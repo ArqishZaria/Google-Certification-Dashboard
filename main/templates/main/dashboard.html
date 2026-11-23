@@ -22,6 +22,7 @@
   <div class="kpi"><div class="v">{{ k.courses_completed|fmt_num }}</div><div class="l">Individual courses completed</div><div class="n">{{ k.learning_hours|fmt_num }} learning hours</div></div>
 </div>
 
+{% if outside %}<p class="note">{{ outside|fmt_num }} licence holder(s) on Coursera are <b>not on the Final list</b>, so they are not counted in any region. See Data quality.</p>{% endif %}
 {% if nat %}<div class="card"><h2>National Council staff <span class="note">- kept separate; not included in any regional figure above or below</span></h2>
   <p>{{ nat.licensed|fmt_num }} licensed | {{ nat.accepted|fmt_num }} accepted | {{ nat.pending|fmt_num }} pending | {{ nat.started|fmt_num }} started | {{ nat.completed|fmt_num }} completed a Professional Certificate | {{ nat.courses_completed|fmt_num }} individual courses completed
   &nbsp; <a href="?region=National">Open National staff view &rarr;</a></p></div>{% endif %}

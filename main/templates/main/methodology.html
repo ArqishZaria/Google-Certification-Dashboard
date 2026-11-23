@@ -14,7 +14,7 @@
 <li><b>Completion rate</b> = completed &divide; accepted licences. <b>Utilisation</b> = accepted &divide; issued. <b>Activation</b> = started &divide; issued.</li>
 <li>Monthly and weekly growth tables bucket dates in Pakistan time (UTC+5).</li>
 <li>Inactivity is measured against the <b>snapshot date of the Coursera export</b>, not today's date, so numbers do not drift between imports.</li>
-<li><b>Region</b> = the tab of the <b>Final list</b> (final regional distribution) the person was shortlisted in. Only people on the Final list are counted: a Coursera licence that is not on it is listed on the Data quality page and is not counted in any region. People are matched by CNIC first, then email, so a person listed twice counts once.</li>
+<li><b>Region</b> = the tab of the <b>Final list</b> (final regional distribution) the person was shortlisted in. Only people on the Final list are counted: a Coursera licence that is not on it is listed on the Data quality page and is not counted in any region. One seat = one unique licence email on the Final list (Coursera issues licences per email). A row repeated with the same email counts once; the same CNIC with a different email is a second seat and is flagged for a typo check. People are matched to Coursera by email first, then CNIC.</li>
 <li><b>National Council staff</b> (Final-list tab "National") are a separate group: they are never included in a region or in the regional totals and are shown in their own block (filter: Region = National).</li>
 <li><b>Local council / Area</b> come from the registration form and are shown only when the person lives in the region they are counted under.</li>
 <li><b>In progress</b> = started and not completed (= active + inactive).</li>

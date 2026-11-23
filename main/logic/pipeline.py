@@ -133,15 +133,18 @@ def build(src: Sources) -> dict:
         else:
             key = e["cnic"]
         p = persons.get(key)
+        if p is not None and e["cnic"] and e["email"] and e["email"] not in {x["email"] for x in p["entries"]}:
+            # Same CNIC, different licence email. Coursera issues licences per email, so each unique email is its own
+            # licence seat (this is how Southern reaches 468 licences issued).
+            issue(WARNING, "FINAL_MULTI_EMAIL", f"'{e['name']}' is listed with a different email for the same CNIC ({e['email']}). Counted as a separate licence seat because Coursera issues licences per email; check for a typo.", ref=key, pkey=key)
+            key = "EMAIL:" + e["email"]
+            p = persons.get(key)
         if p is None:
             persons[key] = p = _new_person(key, e["cnic"], e["name"], e["gender"], e["region"], True)
             p["entries"] = [e]
         else:
             p["entries"].append(e)
-            if e["email"] == p["entries"][0]["email"]:
-                issue(INFO, "FINAL_DUP_ROW", f"'{e['name']}' is listed twice in the shortlist with identical CNIC and email; counted once.", ref=key, pkey=key)
-            else:
-                issue(WARNING, "FINAL_MULTI_EMAIL", f"'{e['name']}' has several shortlist rows with different emails for the same CNIC (one person = one licence).", ref=key, pkey=key)
+            issue(INFO, "FINAL_DUP_ROW", f"'{e['name']}' is listed twice in the shortlist with identical CNIC and email; counted once.", ref=key, pkey=key)
             if e["region"] != p["entries"][0]["region"]:
                 issue(WARNING, "FINAL_MULTI_REGION", f"'{e['name']}' is shortlisted in more than one region sheet.", ref=key, pkey=key)
         for em in (e["email"], e["email_alt"]):
@@ -157,6 +160,8 @@ def build(src: Sources) -> dict:
     # link persons -> registration
     used_regs = {}
     for key, p in persons.items():
+        if p["cnic"] and key != p["cnic"] and p["cnic"] in persons:
+            continue    # extra licence seat of a person already linked to a registration
         reg, how = (reg_by_cnic.get(p["cnic"]) if p["cnic"] else None), "cnic"
         if reg is None:
             for em in sorted(p["emails"]):

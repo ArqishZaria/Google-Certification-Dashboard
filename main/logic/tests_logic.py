@@ -307,13 +307,11 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("Possible match", msg)
         self.assertIn("LICENSE_NOT_SHORTLISTED", self.codes(ds))
 
-    def test_duplicate_person_one_participant_two_licences(self):
+    def test_same_cnic_two_emails_are_two_seats_each_with_its_own_licence(self):
         ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com"), final_row(self.C1, "a2@x.com")],
                  [prog_row("a@x.com", self.C1), prog_row("a2@x.com", None, state="INVITED")])
-        self.assertEqual(len(ds["participants"]), 1)
-        self.assertEqual(ds["participants"][0]["license_count"], 2)
-        self.assertEqual(ds["participants"][0]["license_state"], "ACCEPTED")
-        self.assertIn("MULTIPLE_LICENSES", self.codes(ds))
+        self.assertEqual(sorted(p["license_state"] for p in ds["participants"]), ["ACCEPTED", "PENDING"])
+        self.assertTrue(all(p["license_count"] == 1 and p["shortlisted"] for p in ds["participants"]))
 
     def test_orphan_licence_is_flagged_not_dropped(self):
         ds = run([], [], [prog_row("ghost@x.com")])
@@ -375,9 +373,16 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("REGION_MISMATCH", self.codes(ds))
 
     def test_person_listed_twice_in_final_list_counts_once(self):
-        ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com", "Aniya"), final_row(self.C1, "a@x.com", "Aniya Ali"),
-                                                      final_row(self.C1, "a2@x.com", "Aniya Ali")], [prog_row("a@x.com", self.C1)])
+        ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com", "Aniya"), final_row(self.C1, "a@x.com", "Aniya Ali")],
+                 [prog_row("a@x.com", self.C1)])
         self.assertEqual(len(ds["participants"]), 1)
+
+    def test_same_cnic_with_a_different_email_is_a_second_licence_seat(self):
+        ds = run([master_row(1, self.C1, "a@x.com")], [final_row(self.C1, "a@x.com"), final_row(self.C1, "a2@x.com")],
+                 [prog_row("a@x.com", self.C1), prog_row("a2@x.com", self.C1)])
+        self.assertEqual(len(ds["participants"]), 2)
+        self.assertEqual([p["license_state"] for p in ds["participants"]].count("NONE"), 0)
+        self.assertIn("FINAL_MULTI_EMAIL", self.codes(ds))
 
     def test_licence_outside_final_list_has_no_region(self):
         ds = run([master_row(1, self.C1, "a@x.com")], [], [prog_row("a@x.com", self.C1)])
