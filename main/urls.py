@@ -4,7 +4,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("", views.home, name="home"),
+    # The site's start page IS the login page (signed-in users go straight to the dashboard).
+    path("", auth_views.LoginView.as_view(template_name="main/login.html", redirect_authenticated_user=True), name="home"),
     path("dashboard/login/", auth_views.LoginView.as_view(template_name="main/login.html", redirect_authenticated_user=True), name="login"),
     path("dashboard/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("dashboard/", views.dashboard, name="dashboard"),

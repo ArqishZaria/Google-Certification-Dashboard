@@ -21,10 +21,6 @@ from .models import (Area, DataImport, DataIssue, LocalCouncil, Participant, Reg
 GROUP_TITLES = {"region": "Region", "council_label": "Local council", "area_label": "Area (Jamatkhana)"}
 
 
-def home(request):
-    return render(request, "main/home.html")
-
-
 # ----------------------------------------------------------------------------- decorators
 def scoped(view):
     """Login required + resolve the user's data scope. No scope => friendly 403 page."""

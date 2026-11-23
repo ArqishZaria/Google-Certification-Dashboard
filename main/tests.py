@@ -195,3 +195,18 @@ class ResetCommandTests(TestCase):
         call_command("reset_gcc_data", "--yes", verbosity=0)
         self.assertEqual((Participant.objects.count(), DataImport.objects.count()), (0, 0))
         self.assertTrue(User.objects.filter(username="keep").exists())
+
+
+class StartPageTests(TestCase):
+    def test_root_is_the_login_page_and_signed_in_users_go_to_dashboard(self):
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'type="password"')
+        User.objects.create_user("u", password="pw")
+        self.client.login(username="u", password="pw")
+        r = self.client.get("/")
+        self.assertRedirects(r, "/dashboard/", fetch_redirect_response=False)
+
+    def test_models_and_migrations_match(self):
+        from django.core.management import call_command
+        call_command("makemigrations", "--check", "--dry-run", verbosity=0)
