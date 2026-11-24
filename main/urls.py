@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import resolve_views, views
 
 urlpatterns = [
     # The site's start page IS the login page (signed-in users go straight to the dashboard).
@@ -17,6 +17,9 @@ urlpatterns = [
     path("dashboard/reports/<slug:slug>/download/<str:fmt>/", views.report_download, name="report_download"),
     path("dashboard/data-quality/", views.data_quality, name="data_quality"),
     path("dashboard/import/", views.import_data, name="import_data"),
+    path("dashboard/resolve/", resolve_views.resolve_page, name="resolve"),
+    path("dashboard/resolve/act/", resolve_views.resolve_act, name="resolve_act"),
+    path("dashboard/resolve/apply/", resolve_views.resolve_apply, name="resolve_apply"),
     path("dashboard/import/template/<str:kind>/", views.import_template, name="import_template"),
     path("dashboard/recalculate/", views.recalculate, name="recalculate"),
     path("dashboard/methodology/", views.methodology, name="methodology"),

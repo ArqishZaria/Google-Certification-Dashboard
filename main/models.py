@@ -282,6 +282,41 @@ class IdentityOverride(models.Model):
         return f"{self.email} -> {self.cnic}"
 
 
+class SeatChange(models.Model):
+    """A manual correction to the Final list, made on the Resolve queries page and re-applied on every import.
+    ADD = give a licence holder a seat; FIX_EMAIL / FIX_CNIC = correct a seat's email or CNIC; REMOVE = take a seat out."""
+    KINDS = [("ADD", "Added to the Final list"), ("FIX_EMAIL", "Email corrected"), ("FIX_CNIC", "CNIC corrected"), ("REMOVE", "Removed from the Final list")]
+    kind = models.CharField(max_length=10, choices=KINDS)
+    email = models.EmailField(help_text="The email the seat has in the Final list (for ADD: the licence email).")
+    new_value = models.CharField(max_length=120, blank=True, help_text="New email / CNIC (for ADD: optional CNIC).")
+    name = models.CharField(max_length=200, blank=True)
+    region = models.CharField(max_length=40, blank=True, help_text="ADD only: the region the seat belongs to.")
+    note = models.CharField(max_length=250, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind", "email"], name="uniq_seatchange")]
+
+    def __str__(self):
+        return f"{self.kind} {self.email}"
+
+
+class Dismissal(models.Model):
+    """'Reviewed - leave as it is' for one issue (matched by code + ref) so it stops showing in the queue."""
+    code = models.CharField(max_length=40)
+    ref = models.CharField(max_length=200)
+    note = models.CharField(max_length=250, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["code", "ref"], name="uniq_dismissal")]
+
+    def __str__(self):
+        return f"{self.code} {self.ref}"
+
+
 class UserScope(models.Model):
     """Who may see what.  No scope row (and not a superuser) = no access.
     National roles see everything; otherwise the most specific of area > local council > region applies."""

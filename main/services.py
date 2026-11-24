@@ -8,7 +8,7 @@ from django.db.models import Q
 from .logic import catalog as C
 from .logic import loader, metrics as M, pipeline as P
 from .logic.datastore import DataStore
-from .models import (Area, CourseEnrollment, DataImport, DataIssue, IdentityOverride, License, LocalCouncil,
+from .models import (Area, CourseEnrollment, DataImport, DataIssue, IdentityOverride, License, LocalCouncil, SeatChange,
                      Participant, Region, Registration, Specialization, SpecializationEnrollment, UserScope)
 
 INACTIVITY_DAYS = getattr(settings, "GCC_INACTIVITY_DAYS", M.DEFAULT_INACTIVITY_DAYS)
@@ -30,6 +30,21 @@ def ensure_regions():
     return out
 
 
+def db_seat_changes():
+    ch = {"fix_email": {}, "fix_cnic": {}, "remove": set(), "add": []}
+    for s in SeatChange.objects.all():
+        e = s.email.lower()
+        if s.kind == "FIX_EMAIL":
+            ch["fix_email"][e] = s.new_value.lower()
+        elif s.kind == "FIX_CNIC":
+            ch["fix_cnic"][e] = s.new_value
+        elif s.kind == "REMOVE":
+            ch["remove"].add(e)
+        elif s.kind == "ADD":
+            ch["add"].append({"email": e, "name": s.name, "region": s.region, "cnic": s.new_value})
+    return ch
+
+
 def db_overrides():
     identity = {(o.account, o.email.lower()): o.cnic for o in IdentityOverride.objects.all()}
     spec = {s.slug: {"family": s.family, "category": s.category} for s in Specialization.objects.all()}
@@ -41,6 +56,7 @@ def run_import(paths, user=None, allow_fewer_accounts=False):
     """Full, idempotent refresh from the supplied files. Either everything is replaced or nothing is."""
     identity, spec_over = db_overrides()
     src, detected = loader.load_sources(paths, identity, spec_over, INACTIVITY_DAYS)
+    src.seat_changes = db_seat_changes()
     ds = P.build(src)
     prev = DataImport.objects.first()
     if prev and not allow_fewer_accounts:

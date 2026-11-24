@@ -1,0 +1,80 @@
+{% extends "main/base.html" %}{% block title %}Resolve queries{% endblock %}
+{% block content %}
+<style>
+.rq form{display:inline-flex;gap:6px;align-items:center;margin:2px 0;flex-wrap:wrap}
+.rq select,.rq input[type=text]{max-width:300px;padding:5px 6px}
+.rq details{margin-top:6px}.rq summary{cursor:pointer;color:#1a56a0;font-size:13px}
+.rq .sug{background:#f2f8f2;border-left:3px solid #2e8b57;padding:6px 8px;margin-bottom:6px;font-size:13px}
+.rq .warn{color:#b45309;font-size:12px}.rq .mut{color:#667;font-size:12px}
+.rq .btn.danger{background:#b42318}.rq td{vertical-align:top}
+.rq .sticky{position:sticky;top:0;z-index:5}
+</style>
+<div class="rq">
+<h1>Resolve queries</h1>
+<div class="sub">Every case where the Final list and Coursera do not line up, in one place. Saved decisions are kept for every future import.</div>
+
+<div class="card sticky"><b>{{ open_total }}</b> open case(s):
+ <a class="chip" href="#seats">Seats without a licence: {{ seat_rows|length }}</a>
+ <a class="chip" href="#licences">Licences not on the Final list: {{ lic_rows|length }}</a>
+ <a class="chip" href="#other">Other checks: {{ other_total }}</a>
+ <a class="chip" href="#history">Decisions: {{ history|length }}</a>
+ <form method="post" action="{% url 'resolve_apply' %}" style="margin-left:12px">{% csrf_token %}
+ <button class="btn" type="submit">Apply &amp; recalculate{% if waiting %} ({{ waiting }} waiting){% endif %}</button></form>
+ {% if waiting %}<div class="msg warning" style="margin-top:8px">{{ waiting }} decision(s) are saved but the numbers are not updated yet. Press <b>Apply &amp; recalculate</b> when you have finished.</div>{% endif %}
+</div>
+
+<div class="card" id="seats"><h2>Seats without a Coursera licence ({{ seat_rows|length }})</h2>
+<p class="note">People on the Final list for whom no licence was found. Usually the licence exists under a slightly different email.</p>
+{% if seat_rows %}<div class="tscroll"><table><tr><th>Seat on the Final list</th><th>Best match among unassigned licences</th><th>Other actions</th></tr>
+{% for r in seat_rows %}<tr>
+<td><b>{{ r.seat.name }}</b><br>{{ r.seat.region.name|default:"-" }}<br>{{ r.seat.email }}<br><span class="mut">CNIC {{ r.seat.cnic|default:"missing" }}</span></td>
+<td>{% if r.suggest %}<div class="sug"><b>{{ r.suggest.lic.name }}</b> &lt;{{ r.suggest.lic.email }}&gt;<br>{{ r.suggest.lic.program_region|default:"?" }} programme &middot; {{ r.suggest.lic.state|lower }}<br><span class="mut">name {{ r.suggest.name_pct }}% &middot; email {{ r.suggest.email_pct }}%</span>
+{% if r.suggest.cnic_conflict %}<br><span class="warn">&#9888; This licence has a different CNIC on file. It may be a different person.</span>{% endif %}
+{% if r.suggest.region_differs %}<br><span class="warn">&#9888; Programme region differs from the seat's region.</span>{% endif %}</div>
+<form method="post" action="{% url 'resolve_act' %}" {% if r.suggest.cnic_conflict %}onsubmit="return confirm('The CNICs differ. Merge anyway?')"{% endif %}>{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="seat_id" value="{{ r.seat.pk }}"><input type="hidden" name="lic_id" value="{{ r.suggest.lic.pk }}"><button class="btn" type="submit">Merge with this licence</button></form>
+{% else %}<span class="mut">No close match found.</span>{% endif %}</td>
+<td><details><summary>More actions</summary>
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="seat_id" value="{{ r.seat.pk }}">
+<select name="lic_id">{% for o in r.options %}<option value="{{ o.lic.pk }}">{{ o.lic.name }} - {{ o.lic.email }} ({{ o.lic.program_region|default:"?" }}, {{ o.lic.state|lower }})</option>{% endfor %}</select><button class="btn alt" type="submit">Merge with chosen licence</button></form><br>
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="fix_email"><input type="hidden" name="seat_id" value="{{ r.seat.pk }}"><input type="text" name="value" placeholder="correct email" required><button class="btn alt" type="submit">Edit email</button></form><br>
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="fix_cnic"><input type="hidden" name="seat_id" value="{{ r.seat.pk }}"><input type="text" name="value" placeholder="correct CNIC (13 digits)" required><button class="btn alt" type="submit">Edit CNIC</button></form><br>
+<form method="post" action="{% url 'resolve_act' %}" onsubmit="return confirm('Remove this seat from the Final list?')">{% csrf_token %}<input type="hidden" name="action" value="remove_seat"><input type="hidden" name="seat_id" value="{{ r.seat.pk }}"><button class="btn danger" type="submit">Delete seat</button></form>
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="dismiss_seat"><input type="hidden" name="seat_id" value="{{ r.seat.pk }}"><button class="btn alt" type="submit">Mark reviewed (keep as is)</button></form>
+</details></td></tr>{% endfor %}</table></div>{% else %}<div class="msg success">No seats are waiting for a licence.</div>{% endif %}</div>
+
+<div class="card" id="licences"><h2>Coursera licences not on the Final list ({{ lic_rows|length }})</h2>
+<p class="note">Licence holders who match no seat. They are not counted in any region until you merge them with a seat or add them to the Final list.</p>
+{% if lic_rows %}<div class="tscroll"><table><tr><th>Coursera licence</th><th>Best match among seats without a licence</th><th>Other actions</th></tr>
+{% for r in lic_rows %}<tr>
+<td><b>{{ r.lic.name }}</b><br>{{ r.lic.email }}<br>{{ r.lic.program_region|default:"?" }} programme &middot; {{ r.lic.state|lower }}<br><span class="mut">CNIC on file: {{ r.known_cnic|default:"none" }}</span></td>
+<td>{% if r.suggest %}<div class="sug"><b>{{ r.suggest.seat.name }}</b> &lt;{{ r.suggest.seat.email }}&gt;<br>{{ r.suggest.seat.region.name|default:"-" }} seat<br><span class="mut">name {{ r.suggest.name_pct }}% &middot; email {{ r.suggest.email_pct }}%</span>
+{% if r.suggest.cnic_conflict %}<br><span class="warn">&#9888; Different CNIC. It may be a different person.</span>{% endif %}
+{% if r.suggest.region_differs %}<br><span class="warn">&#9888; Programme region differs from the seat's region.</span>{% endif %}</div>
+<form method="post" action="{% url 'resolve_act' %}" {% if r.suggest.cnic_conflict %}onsubmit="return confirm('The CNICs differ. Merge anyway?')"{% endif %}>{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="seat_id" value="{{ r.suggest.seat.pk }}"><input type="hidden" name="lic_id" value="{{ r.lic.pk }}"><button class="btn" type="submit">Merge with this seat</button></form>
+{% else %}<span class="mut">No close match found.</span>{% endif %}</td>
+<td><details><summary>More actions</summary>
+{% if r.options %}<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="lic_id" value="{{ r.lic.pk }}">
+<select name="seat_id">{% for o in r.options %}<option value="{{ o.seat.pk }}">{{ o.seat.name }} - {{ o.seat.email }} ({{ o.seat.region.name|default:"-" }})</option>{% endfor %}</select><button class="btn alt" type="submit">Merge with chosen seat</button></form><br>{% endif %}
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="add_seat"><input type="hidden" name="lic_id" value="{{ r.lic.pk }}">
+<select name="region">{% for g in regions %}<option value="{{ g }}" {% if g == r.lic.program_region %}selected{% endif %}>{{ g }}</option>{% endfor %}</select><input type="text" name="value" placeholder="CNIC (optional)"><button class="btn alt" type="submit">Add to Final list</button></form><br>
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="dismiss_licence"><input type="hidden" name="lic_id" value="{{ r.lic.pk }}"><button class="btn alt" type="submit">Mark reviewed (leave uncounted)</button></form>
+</details></td></tr>{% endfor %}</table></div>{% else %}<div class="msg success">Every licence belongs to a seat.</div>{% endif %}</div>
+
+<div class="card" id="other"><h2>Other checks ({{ other_total }})</h2>
+<p class="note">Duplicates and data problems found in the files. Mark an item reviewed once you have looked at it.</p>
+{% for g in groups %}<h3>{{ g.label }} ({{ g.rows|length }})</h3>
+<div class="tscroll"><table><tr><th>Severity</th><th>What was found</th><th>Actions</th></tr>
+{% for r in g.rows %}<tr><td><span class="pill s-{{ r.issue.severity }}">{{ r.issue.severity }}</span></td><td>{{ r.issue.message }}
+{% for s in r.seats %}<div class="mut">Seat: {{ s.email }} &middot; {{ s.license_state|lower }} {% if s.license_state == "NONE" %}(no licence){% endif %}
+<form method="post" action="{% url 'resolve_act' %}" onsubmit="return confirm('Remove this seat?')">{% csrf_token %}<input type="hidden" name="action" value="remove_seat"><input type="hidden" name="seat_id" value="{{ s.pk }}"><button class="btn danger" type="submit">Delete this seat</button></form></div>{% endfor %}</td>
+<td>{% if r.fix_seat %}<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="fix_cnic"><input type="hidden" name="seat_id" value="{{ r.fix_seat.pk }}"><input type="text" name="value" placeholder="correct CNIC" required><button class="btn alt" type="submit">Edit CNIC</button></form><br>{% endif %}
+<form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="dismiss"><input type="hidden" name="code" value="{{ r.issue.code }}"><input type="hidden" name="ref" value="{{ r.issue.ref }}"><button class="btn alt" type="submit">Mark reviewed</button></form></td></tr>{% endfor %}</table></div>
+{% empty %}<div class="msg success">Nothing else to check.</div>{% endfor %}</div>
+
+<div class="card" id="history"><h2>Decisions made ({{ history|length }})</h2>
+{% if history %}<div class="tscroll"><table><tr><th>When</th><th>Decision</th><th>Status</th><th></th></tr>
+{% for h in history %}<tr><td>{{ h.when|date:"d M H:i" }}</td><td>{{ h.text }}</td><td>{% if h.waiting %}<span class="pill s-WARNING">waiting for recalculation</span>{% else %}applied{% endif %}</td>
+<td><form method="post" action="{% url 'resolve_act' %}">{% csrf_token %}<input type="hidden" name="action" value="undo"><input type="hidden" name="kind" value="{{ h.kind }}"><input type="hidden" name="pk" value="{{ h.pk }}"><button class="btn alt" type="submit">Undo</button></form></td></tr>{% endfor %}</table></div>
+{% else %}<p class="note">No decisions yet.</p>{% endif %}</div>
+</div>
+{% endblock %}

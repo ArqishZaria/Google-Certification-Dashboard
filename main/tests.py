@@ -210,3 +210,136 @@ class StartPageTests(TestCase):
     def test_models_and_migrations_match(self):
         from django.core.management import call_command
         call_command("makemigrations", "--check", "--dry-run", verbosity=0)
+
+
+class ResolveFlowTests(TestCase):
+    """The Resolve queries page: queues, suggestions, every action, and that decisions change the numbers after Apply."""
+    C1, C2 = "4210100000001", "4210100000002"
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.store = tempfile.mkdtemp()
+
+    def setUp(self):
+        from openpyxl import Workbook
+        from .logic.tests_logic import final_row, master_row, prog_row
+        self.settings_cm = override_settings(GCC_DATA_DIR=self.store)
+        self.settings_cm.enable()
+        self.addCleanup(self.settings_cm.disable)
+        t = tempfile.mkdtemp()
+        self.paths = {}
+
+        def xlsx(name, sheets):
+            wb = Workbook(); wb.remove(wb.active)
+            for title, rows in sheets.items():
+                ws = wb.create_sheet(title); cols = list(rows[0].keys()); ws.append(cols)
+                for r in rows:
+                    ws.append([r[c] for c in cols])
+            p = os.path.join(t, name); wb.save(p); return p
+        self.paths["master"] = xlsx("master.xlsx", {"Certificate Applications": [master_row(1, self.C1, "m1@x.com", name="Alice Khan"), master_row(2, self.C2, "m2@x.com", name="Bob Ali")]})
+        # Alice's seat has a typo in the email; Bob is listed twice with two emails
+        self.paths["final"] = xlsx("final.xlsx", {"Southern": [final_row(self.C1, "alice@x.cm", "Alice Khan"), final_row(self.C2, "bob@x.com", "Bob Ali"), final_row(self.C2, "bob2@x.com", "Bob Ali")]})
+        suffix = "gwg-ent-test_-_CourseraEnterpriseExport_2026-11-07_08-27-27_UTC.csv"
+        rows = [prog_row("alice@x.com", None, name="Alice Khan"), prog_row("bob@x.com", None, name="Bob Ali"), prog_row("zed@x.com", None, name="Zed Qureshi")]
+        cp = os.path.join(t, f"Program_Activity_{suffix}")
+        write_csv(cp, rows)
+        sp = os.path.join(t, f"Specialisation_Activity_{suffix}")
+        from .logic.tests_logic import spec_row
+        write_csv(sp, [spec_row("bob@x.com")])
+        cc = os.path.join(t, f"Course_Activity_{suffix}")
+        write_csv(cc, [{"Name": "Bob", "Email": "bob@x.com", "External ID": "", "Course": "F", "Course ID": "c1", "Course Slug": "f", "Enrollment Time": "2026-08-26T00:00:00Z",
+                        "Last Course Activity Time": "2026-09-10T00:00:00Z", "Overall Progress": "10", "Completed": "No", "Removed From Program": "No",
+                        "Completion Time": "", "Learning Hours": "1", "Course Type": "Course"}])
+        self.cour = [cp, sp, cc]
+        services.import_components(None, master=self.paths["master"], final=self.paths["final"], coursera=self.cour)
+        self.user = User.objects.create_superuser("boss", "b@x.com", "pw")
+        self.client.force_login(self.user)
+
+    def act(self, **kw):
+        return self.client.post("/dashboard/resolve/act/", kw, follow=True)
+
+    def apply(self):
+        return self.client.post("/dashboard/resolve/apply/", follow=True)
+
+    def seat(self, email):
+        return Participant.objects.get(shortlisted=True, email=email)
+
+    def test_page_lists_every_kind_of_case_and_suggests_the_match(self):
+        r = self.client.get("/dashboard/resolve/")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Seats without a Coursera licence")
+        self.assertContains(r, "alice@x.cm")                       # the seat with the typo
+        self.assertContains(r, "alice@x.com")                      # the licence that belongs to it, suggested
+        self.assertContains(r, "Merge with this licence")
+        self.assertContains(r, "zed@x.com")                        # a licence nobody is assigned to
+        self.assertContains(r, "Same person listed with two emails")  # Bob twice
+
+    def test_only_staff_may_use_the_page(self):
+        User.objects.create_user("plain", password="pw")
+        self.client.logout(); self.client.login(username="plain", password="pw")
+        self.assertEqual(self.client.get("/dashboard/resolve/").status_code, 403)
+        self.assertEqual(self.client.post("/dashboard/resolve/act/", {"action": "dismiss", "code": "X"}).status_code, 403)
+
+    def test_merge_then_apply_gives_the_seat_its_licence(self):
+        from .models import License
+        seat, lic = self.seat("alice@x.cm"), License.objects.get(email="alice@x.com")
+        self.assertEqual(seat.license_state, "NONE")
+        self.act(action="merge", seat_id=seat.pk, lic_id=lic.pk)
+        self.assertContains(self.client.get("/dashboard/resolve/"), "waiting for recalculation")
+        self.apply()
+        seat = Participant.objects.get(shortlisted=True, cnic=self.C1)
+        self.assertEqual(seat.license_state, "ACCEPTED")
+        self.assertEqual(seat.region.name, "Southern")
+        self.assertNotContains(self.client.get("/dashboard/resolve/"), "Merge with this licence")
+
+    def test_edit_email_then_apply_matches_the_licence(self):
+        seat = self.seat("alice@x.cm")
+        self.act(action="fix_email", seat_id=seat.pk, value="alice@x.com")
+        self.apply()
+        self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C1).license_state, "ACCEPTED")
+        # correcting the same seat again keeps working (the original Final-list email stays the key)
+        seat = Participant.objects.get(shortlisted=True, cnic=self.C1)
+        self.act(action="fix_email", seat_id=seat.pk, value="alice@x.com")
+        self.apply()
+        self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C1).license_state, "ACCEPTED")
+
+    def test_delete_seat_removes_the_duplicate(self):
+        self.assertEqual(Participant.objects.filter(shortlisted=True, cnic=self.C2).count(), 2)
+        self.act(action="remove_seat", seat_id=self.seat("bob2@x.com").pk)
+        self.apply()
+        self.assertEqual(Participant.objects.filter(shortlisted=True, cnic=self.C2).count(), 1)
+        self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C2).license_state, "ACCEPTED")
+
+    def test_add_to_final_list_counts_the_licence_holder_in_that_region(self):
+        from .models import License
+        lic = License.objects.get(email="zed@x.com")
+        self.assertFalse(Participant.objects.get(licenses=lic).shortlisted)
+        self.act(action="add_seat", lic_id=lic.pk, region="Hunza", value="")
+        self.apply()
+        p = Participant.objects.get(licenses__email="zed@x.com")
+        self.assertTrue(p.shortlisted)
+        self.assertEqual(p.region.name, "Hunza")
+
+    def test_mark_reviewed_hides_the_row_and_undo_brings_it_back(self):
+        from .models import License
+        lic = License.objects.get(email="zed@x.com")
+        self.act(action="dismiss_licence", lic_id=lic.pk)
+        self.assertNotContains(self.client.get("/dashboard/resolve/"), "Zed Qureshi")
+        from .models import Dismissal
+        self.act(action="undo", kind="dismiss", pk=Dismissal.objects.get().pk)
+        self.assertContains(self.client.get("/dashboard/resolve/"), "Zed Qureshi")
+
+    def test_bad_input_is_explained_not_a_crash(self):
+        seat = self.seat("alice@x.cm")
+        r = self.act(action="fix_email", seat_id=seat.pk, value="not-an-email")
+        self.assertContains(r, "not a valid email")
+        r = self.act(action="fix_cnic", seat_id=seat.pk, value="123")
+        self.assertContains(r, "13 digits")
+        r = self.act(action="merge", seat_id=99999, lic_id=99999)
+        self.assertContains(r, "no longer exists")
+
+    def test_decisions_survive_a_full_reimport(self):
+        self.act(action="fix_email", seat_id=self.seat("alice@x.cm").pk, value="alice@x.com")
+        services.import_components(None, master=self.paths["master"], final=self.paths["final"], coursera=self.cour)
+        self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C1).license_state, "ACCEPTED")

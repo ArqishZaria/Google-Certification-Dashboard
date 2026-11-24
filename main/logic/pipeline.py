@@ -37,6 +37,8 @@ class Sources:
     overrides: dict = field(default_factory=dict)       # (account, email) -> cnic
     spec_overrides: dict = field(default_factory=dict)  # slug -> {'family':..,'category':..}
     inactivity_days: int = M.DEFAULT_INACTIVITY_DAYS
+    # manual Final-list corrections: {"fix_email": {old: new}, "fix_cnic": {email: cnic}, "remove": {email}, "add": [{email, name, region, cnic}]}
+    seat_changes: dict = field(default_factory=dict)
 
 
 def build(src: Sources) -> dict:
@@ -122,10 +124,41 @@ def build(src: Sources) -> dict:
                 "note": status_note,
             })
 
+    # manual corrections made on the Resolve queries page
+    ch = src.seat_changes or {}
+    if ch:
+        fix_email, fix_cnic, remove = ch.get("fix_email", {}), ch.get("fix_cnic", {}), ch.get("remove", set())
+        kept = []
+        for e in entries:
+            orig = e["email"]
+            new = fix_email.get(orig, orig)
+            if orig in remove or new in remove:
+                issue(INFO, "SEAT_REMOVED", f"'{e['name']}' ({orig}) was removed from the Final list by a manual decision.", ref=str(orig))
+                continue
+            e["email"] = new
+            c = N.norm_cnic(fix_cnic.get(orig) or fix_cnic.get(new))
+            if c:
+                e["cnic"] = c
+            kept.append(e)
+        entries = kept
+        have = {e["email"] for e in entries}
+        for a in ch.get("add", []):
+            em = N.norm_email(a["email"])
+            if not em or em in have:
+                continue
+            cands = reg_by_email.get(em, [])
+            cnic = N.norm_cnic(a.get("cnic")) or (cands[0]["cnic"] if len(cands) == 1 else None)
+            entries.append({"sheet": "(added manually)", "region": a["region"], "name": a["name"], "email": em, "email_alt": None,
+                            "cnic": cnic, "raw_cnic": a.get("cnic"), "gender": None, "preferred_label": None,
+                            "note": "Added manually", "manual": True})
+
     persons, email_index = {}, {}
     for e in entries:
         if e["cnic"] is None:
-            issue(ERROR, "FINAL_BAD_CNIC", f"Shortlisted '{e['name']}' ({e['sheet']}) has a missing/invalid CNIC ({e['raw_cnic']!r}).", ref=e["name"])
+            if e.get("manual"):
+                issue(WARNING, "ADDED_SEAT_NO_CNIC", f"'{e['name']}' was added to the Final list manually and no CNIC is known (no registration with this email).", ref=e["email"] or e["name"])
+            else:
+                issue(ERROR, "FINAL_BAD_CNIC", f"Shortlisted '{e['name']}' ({e['sheet']}) has a missing/invalid CNIC ({e['raw_cnic']!r}).", ref=e["name"])
             if not e["email"]:
                 issue(ERROR, "FINAL_NO_IDENTITY", f"Shortlisted '{e['name']}' ({e['sheet']}) has no CNIC and no email; skipped.", ref=e["name"])
                 continue

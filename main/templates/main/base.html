@@ -14,7 +14,7 @@
     <a href="{% url 'reports' %}" class="{% if 'report' in request.resolver_match.url_name %}on{% endif %}">Reports</a>
     <a href="{% url 'methodology' %}">Methodology</a>
     {% if is_national %}<a href="{% url 'data_quality' %}">Data quality</a>{% endif %}
-    {% if can_import %}<a href="{% url 'import_data' %}">Import data</a><a href="/admin/">Admin</a>{% endif %}
+    {% if can_import %}<a href="{% url 'resolve' %}" class="{% if request.resolver_match.url_name == 'resolve' %}on{% endif %}">Resolve queries</a><a href="{% url 'import_data' %}">Import data</a><a href="/admin/">Admin</a>{% endif %}
   </nav>
   <div class="who">{{ user.get_username }}<br>{{ scope_label }}
     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Log out</button></form></div>

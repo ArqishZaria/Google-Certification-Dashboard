@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 
 from . import services
-from .models import (Area, CourseEnrollment, DataImport, DataIssue, IdentityOverride, License, LocalCouncil, Participant,
+from .models import (Dismissal, SeatChange, Area, CourseEnrollment, DataImport, DataIssue, IdentityOverride, License, LocalCouncil, Participant,
                      Region, Registration, Specialization, SpecializationEnrollment, UserScope)
 
 
@@ -58,3 +58,13 @@ class LicenseAdmin(admin.ModelAdmin):
 
 
 admin.site.register([Region, LocalCouncil, Area, SpecializationEnrollment, CourseEnrollment, DataIssue, DataImport])
+
+
+@admin.register(SeatChange)
+class SeatChangeAdmin(admin.ModelAdmin):
+    list_display = ("kind", "email", "new_value", "name", "region", "created_at")
+
+
+@admin.register(Dismissal)
+class DismissalAdmin(admin.ModelAdmin):
+    list_display = ("code", "ref", "created_at")
