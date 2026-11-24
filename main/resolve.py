@@ -101,9 +101,26 @@ def build_context(imp):
         history.append({"kind": "dismiss", "pk": d.pk, "when": d.created_at, "waiting": False,
                         "text": f"Marked as reviewed: {CODE_LABELS.get(d.code, d.code)}" + (f" - {d.ref.split('|')[-1]}" if d.ref else "")})
     history.sort(key=lambda h: h["when"], reverse=True)
-    return {"seat_rows": seat_rows, "lic_rows": lic_rows, "groups": list(groups.values()), "history": history,
+    return {"n_confident": len(confident_pairs(seat_rows)), "seat_rows": seat_rows, "lic_rows": lic_rows, "groups": list(groups.values()), "history": history,
             "waiting": sum(1 for h in history if h["waiting"]), "regions": C.REGION_ORDER,
             "open_total": len(seat_rows) + len(lic_rows) + len(other), "other_total": len(other), "imp": imp}
+
+
+def confident_pairs(seat_rows):
+    """Seat/licence pairs the page suggests with a CNIC that does not disagree. Each seat and licence is used once."""
+    used_s, used_l, out = set(), set(), []
+    for r in sorted((r for r in seat_rows if r["suggest"] and not r["suggest"]["cnic_conflict"]), key=lambda r: -r["suggest"]["score"]):
+        s, l = r["seat"], r["suggest"]["lic"]
+        if s.pk not in used_s and l.pk not in used_l and s.cnic:
+            used_s.add(s.pk); used_l.add(l.pk); out.append((s, l))
+    return out
+
+
+def accept_all(imp, user):
+    pairs = confident_pairs(build_context(imp)["seat_rows"])
+    for s, l in pairs:
+        perform("merge", {"seat_id": s.pk, "lic_id": l.pk}, user)
+    return len(pairs)
 
 
 def _replace(model, defaults=None, **lookup):

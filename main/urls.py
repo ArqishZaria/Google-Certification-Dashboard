@@ -20,6 +20,7 @@ urlpatterns = [
     path("dashboard/resolve/", resolve_views.resolve_page, name="resolve"),
     path("dashboard/resolve/act/", resolve_views.resolve_act, name="resolve_act"),
     path("dashboard/resolve/apply/", resolve_views.resolve_apply, name="resolve_apply"),
+    path("dashboard/resolve/accept-all/", resolve_views.resolve_accept_all, name="resolve_accept_all"),
     path("dashboard/import/template/<str:kind>/", views.import_template, name="import_template"),
     path("dashboard/recalculate/", views.recalculate, name="recalculate"),
     path("dashboard/methodology/", views.methodology, name="methodology"),

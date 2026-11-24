@@ -38,6 +38,20 @@ def resolve_act(request):
 
 @require_POST
 @login_required
+def resolve_accept_all(request):
+    """One click: merge every confident suggestion, then recalculate."""
+    if not is_staff_user(request.user):
+        return render(request, "main/no_access.html", status=403)
+    imp = DataImport.objects.first()
+    if imp is None:
+        return redirect("resolve")
+    n = resolve.accept_all(imp, request.user)
+    messages.success(request, f"{n} suggested match(es) accepted.")
+    return resolve_apply(request)
+
+
+@require_POST
+@login_required
 def resolve_apply(request):
     """Re-run the import from the stored files so every saved decision takes effect."""
     if not is_staff_user(request.user):

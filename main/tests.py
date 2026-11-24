@@ -330,6 +330,12 @@ class ResolveFlowTests(TestCase):
         self.act(action="undo", kind="dismiss", pk=Dismissal.objects.get().pk)
         self.assertContains(self.client.get("/dashboard/resolve/"), "Zed Qureshi")
 
+    def test_accept_all_merges_confident_matches_and_recalculates_in_one_click(self):
+        self.assertContains(self.client.get("/dashboard/resolve/"), "suggested matches")
+        self.client.post("/dashboard/resolve/accept-all/", follow=True)
+        self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C1).license_state, "ACCEPTED")
+        self.assertNotContains(self.client.get("/dashboard/resolve/"), "Merge with this licence")
+
     def test_bad_input_is_explained_not_a_crash(self):
         seat = self.seat("alice@x.cm")
         r = self.act(action="fix_email", seat_id=seat.pk, value="not-an-email")

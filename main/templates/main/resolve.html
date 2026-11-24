@@ -18,6 +18,8 @@
  <a class="chip" href="#licences">Licences not on the Final list: {{ lic_rows|length }}</a>
  <a class="chip" href="#other">Other checks: {{ other_total }}</a>
  <a class="chip" href="#history">Decisions: {{ history|length }}</a>
+ {% if n_confident %}<form method="post" action="{% url 'resolve_accept_all' %}" style="margin-left:12px" onsubmit="return confirm('Accept {{ n_confident }} suggested match(es) and recalculate the numbers?')">{% csrf_token %}
+ <button class="btn" type="submit">Accept all {{ n_confident }} suggested matches &amp; recalculate</button></form>{% endif %}
  <form method="post" action="{% url 'resolve_apply' %}" style="margin-left:12px">{% csrf_token %}
  <button class="btn" type="submit">Apply &amp; recalculate{% if waiting %} ({{ waiting }} waiting){% endif %}</button></form>
  {% if waiting %}<div class="msg warning" style="margin-top:8px">{{ waiting }} decision(s) are saved but the numbers are not updated yet. Press <b>Apply &amp; recalculate</b> when you have finished.</div>{% endif %}
