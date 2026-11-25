@@ -336,6 +336,14 @@ class ResolveFlowTests(TestCase):
         self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C1).license_state, "ACCEPTED")
         self.assertNotContains(self.client.get("/dashboard/resolve/"), "Merge with this licence")
 
+    def test_dashboard_shows_the_coursera_programme_view(self):
+        r = self.client.get("/dashboard/")
+        self.assertContains(r, "Coursera programme view")
+        rows = {x["name"]: x for x in r.context["prog"]["rows"]}
+        self.assertEqual((rows["Southern"]["issued"], rows["Southern"]["joined"], rows["Southern"]["enrolled"]), (3, 3, 0))
+        self.assertEqual(rows["Southern"]["seats"], 3)
+        self.assertEqual(r.context["prog"]["total"]["issued"], 3)       # alice, bob, zed all hold a Southern-programme licence
+
     def test_bad_input_is_explained_not_a_crash(self):
         seat = self.seat("alice@x.cm")
         r = self.act(action="fix_email", seat_id=seat.pk, value="not-an-email")

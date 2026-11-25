@@ -102,6 +102,7 @@ def dashboard(request, eff):
     gk = eff["group_key"]
     order = C.REGION_ORDER if gk == "region" else None
     nat = None
+    prog = None
     outside = 0
     if not request.GET.get("region") and not request.GET.get("programme"):
         outside = Participant.objects.filter(shortlisted=False).exclude(license_state="NONE").count()
@@ -114,11 +115,12 @@ def dashboard(request, eff):
         parts = [p for p in parts if p["region"] != "National"]
         regs = [r for r in regs if r["region"] != "National"]
         specs = [s for s in specs if s.get("region") != "National"]
+        prog = services.programme_view(parts)
     pay = M.dashboard_payload(parts, regs, specs, as_of, gk, order)
     heat = pay["heatmap"]
     heat_rows = list(zip(heat["groups"], heat["matrix"]))
     return render(request, "main/dashboard.html", base_ctx(
-        request, eff, pay=pay, k=pay["kpis"], nat=nat, outside=outside, charts=chart_data(pay), heat=heat, heat_rows=heat_rows,
+        request, eff, pay=pay, k=pay["kpis"], nat=nat, prog=prog, outside=outside, charts=chart_data(pay), heat=heat, heat_rows=heat_rows,
         group_title=GROUP_TITLES[gk], inactivity_days=imp.inactivity_days, nrows=len(parts)))
 
 

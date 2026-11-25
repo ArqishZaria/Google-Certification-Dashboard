@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from .logic import catalog as C
 from .logic import loader, metrics as M, pipeline as P
@@ -28,6 +28,30 @@ def ensure_regions():
         r, _ = Region.objects.get_or_create(name=name, defaults={"sort_order": i, "is_national": name == "National"})
         out[name] = r
     return out
+
+
+def programme_view(parts):
+    """Coursera's own programme counts (licences issued / joined / enrolled per licence programme) beside the Final-list
+    seat counts. The Coursera columns do NOT depend on the Final list, so they reproduce Coursera's programme screen."""
+    agg = {r["program_region"]: r for r in License.objects.filter(removed=False).values("program_region").annotate(
+        issued=Count("id"), joined=Count("id", filter=Q(state="ACCEPTED")), enrolled=Count("id", filter=Q(enrolled_courses__gt=0)))}
+    seat = {}
+    for p in parts:
+        s = seat.setdefault(p["region"], {"seats": 0, "joined": 0, "started": 0})
+        s["seats"] += 1
+        s["joined"] += p["license_state"] == "ACCEPTED"
+        s["started"] += bool(p["started"])
+    rows = []
+    for name in C.REGION_ORDER:
+        if name == "National":
+            continue
+        a, s = agg.get(name, {}), seat.get(name, {})
+        rows.append({"name": name, "issued": a.get("issued", 0), "joined": a.get("joined", 0), "enrolled": a.get("enrolled", 0),
+                     "seats": s.get("seats", 0), "seat_joined": s.get("joined", 0), "seat_started": s.get("started", 0)})
+    keys = ("issued", "joined", "enrolled", "seats", "seat_joined", "seat_started")
+    total = {k: sum(r[k] for r in rows) for k in keys}
+    nat = agg.get("National", {})
+    return {"rows": rows, "total": total, "national": {"issued": nat.get("issued", 0), "joined": nat.get("joined", 0), "enrolled": nat.get("enrolled", 0)} if nat else None}
 
 
 def db_seat_changes():
