@@ -39,7 +39,7 @@ def make_files(tmp):
     acct = "gwg-ent-testacct"
     suffix = f"{acct}_-_CourseraEnterpriseExport_2026-09-16_05-42-47_UTC.csv"
     write_csv(os.path.join(tmp, f"Program_Activity_{suffix}"), [
-        prog_row("a@x.com", "4210100000001"), prog_row("b@x.com", None, "INVITED", "AKEPB - Hunza (Male)")])
+        {**prog_row("a@x.com", "4210100000001"), "# Enrolled Courses": "1"}, prog_row("b@x.com", None, "INVITED", "AKEPB - Hunza (Male)")])
     write_csv(os.path.join(tmp, f"Specialisation_Activity_{suffix}"), [spec_row("a@x.com", done="9", total="9", completed="Yes")])
     write_csv(os.path.join(tmp, f"Course_Activity_{suffix}"), [{
         "Name": "Person", "Email": "a@x.com", "External ID": "4210100000001", "Course": "Foundations", "Course ID": "c1", "Course Slug": "f",
@@ -357,3 +357,60 @@ class ResolveFlowTests(TestCase):
         self.act(action="fix_email", seat_id=self.seat("alice@x.cm").pk, value="alice@x.com")
         services.import_components(None, master=self.paths["master"], final=self.paths["final"], coursera=self.cour)
         self.assertEqual(Participant.objects.get(shortlisted=True, cnic=self.C1).license_state, "ACCEPTED")
+
+
+class RegionUserTests(TestCase):
+    """A user created for one region sees that region only - never national data or national tools."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .models import UserScope
+        cls.tmp = tempfile.mkdtemp()
+        services.run_import(make_files(cls.tmp))
+        cls.hunza = Region.objects.get(name="Hunza")
+        cls.chair = User.objects.create_user("hunza_chair", password="pw", is_staff=True)     # even if marked staff
+        UserScope.objects.create(user=cls.chair, role="REGIONAL_CHAIR", region=cls.hunza)
+
+    def test_regional_user_sees_only_their_region(self):
+        self.client.force_login(self.chair)
+        r = self.client.get("/dashboard/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["nrows"], 1)                                   # Hunza's single seat, not Southern's
+        self.assertIsNone(r.context["nat"])
+        self.assertEqual(r.context["outside"], 0)
+        self.assertEqual([x["name"] for x in r.context["prog"]["rows"]], ["Hunza"])
+        self.assertIsNone(r.context["prog"]["national"])
+        self.assertEqual(self.client.get("/dashboard/participants/").context["page"].paginator.count, 1)
+
+    def test_regional_user_cannot_use_national_tools_even_if_staff(self):
+        self.client.force_login(self.chair)
+        for url in ("/dashboard/resolve/", "/dashboard/import/", "/dashboard/data-quality/"):
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+        for url in ("/dashboard/resolve/act/", "/dashboard/resolve/apply/", "/dashboard/resolve/accept-all/", "/dashboard/recalculate/"):
+            self.assertEqual(self.client.post(url, {"action": "dismiss", "code": "X"}).status_code, 403, url)
+        self.assertNotContains(self.client.get("/dashboard/"), "Resolve queries")
+
+    def test_admin_add_user_page_lets_you_pick_the_region(self):
+        admin = User.objects.create_superuser("root", "r@x.com", "pw")
+        self.client.force_login(admin)
+        page = self.client.get("/admin/auth/user/add/")
+        self.assertContains(page, "Dashboard access")
+        self.assertContains(page, 'name="gcc_scope-0-region"')
+        post = {"username": "gilgit_chair", "password1": "S3cure-pass-99", "password2": "S3cure-pass-99",
+                "gcc_scope-TOTAL_FORMS": "1", "gcc_scope-INITIAL_FORMS": "0", "gcc_scope-MIN_NUM_FORMS": "0", "gcc_scope-MAX_NUM_FORMS": "1",
+                "gcc_scope-0-role": "REGIONAL_CHAIR", "gcc_scope-0-region": str(self.hunza.pk)}
+        self.client.post("/admin/auth/user/add/", post, follow=True)
+        u = User.objects.get(username="gilgit_chair")
+        self.assertEqual(u.gcc_scope.region, self.hunza)
+        self.client.force_login(u)
+        self.assertEqual(self.client.get("/dashboard/").context["nrows"], 1)
+
+    def test_admin_refuses_a_regional_role_without_a_region(self):
+        admin = User.objects.create_superuser("root", "r@x.com", "pw")
+        self.client.force_login(admin)
+        post = {"username": "nowhere", "password1": "S3cure-pass-99", "password2": "S3cure-pass-99",
+                "gcc_scope-TOTAL_FORMS": "1", "gcc_scope-INITIAL_FORMS": "0", "gcc_scope-MIN_NUM_FORMS": "0", "gcc_scope-MAX_NUM_FORMS": "1",
+                "gcc_scope-0-role": "REGIONAL_CHAIR"}
+        r = self.client.post("/admin/auth/user/add/", post)
+        self.assertContains(r, "Choose the Region")
+        self.assertFalse(User.objects.filter(username="nowhere").exists())

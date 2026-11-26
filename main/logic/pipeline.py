@@ -411,7 +411,7 @@ def build(src: Sources) -> dict:
             issue(INFO, "RESIDENCE_ALLOCATION_MISMATCH", f"{p['name']}: lives in {residing} but is allocated to {region} in the Final list. Counted under {region}; local council / area not shown.", ref=key, pkey=key)
         gender = (reg or {}).get("gender") or (ent0 or {}).get("gender") or next((l["program_gender"] for l in lics if l["program_gender"]), None) or p.get("gender")
         derived = M.derive_participant(
-            licenses=[{k: l[k] for k in ("state", "removed", "invited_at", "joined_at", "last_activity_at", "learning_hours")} for l in lics],
+            licenses=[{k: l[k] for k in ("state", "removed", "invited_at", "joined_at", "last_activity_at", "learning_hours", "enrolled_courses")} for l in lics],
             specs=specs_by_p.get(key, []), courses=courses_by_p.get(key, []),
             as_of=src.as_of, inactivity_days=src.inactivity_days)
         best_lic = sorted(lics, key=lambda l: (l["state"] != "ACCEPTED", l["email"]))[0] if lics else None

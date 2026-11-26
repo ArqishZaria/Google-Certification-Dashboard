@@ -13,9 +13,13 @@ def _eff(request):
     return services.effective(request.user, {}) or {"label": "National", "level": "national", "q": Q(), "group_key": "region"}
 
 
+def _allowed(request):
+    return is_staff_user(request.user) and _eff(request)["level"] == "national"
+
+
 @login_required
 def resolve_page(request):
-    if not is_staff_user(request.user):
+    if not _allowed(request):
         return render(request, "main/no_access.html", status=403)
     eff = _eff(request)
     imp = DataImport.objects.first()
@@ -27,7 +31,7 @@ def resolve_page(request):
 @require_POST
 @login_required
 def resolve_act(request):
-    if not is_staff_user(request.user):
+    if not _allowed(request):
         return render(request, "main/no_access.html", status=403)
     try:
         messages.success(request, resolve.perform(request.POST.get("action"), request.POST, request.user))
@@ -40,7 +44,7 @@ def resolve_act(request):
 @login_required
 def resolve_accept_all(request):
     """One click: merge every confident suggestion, then recalculate."""
-    if not is_staff_user(request.user):
+    if not _allowed(request):
         return render(request, "main/no_access.html", status=403)
     imp = DataImport.objects.first()
     if imp is None:
@@ -54,7 +58,7 @@ def resolve_accept_all(request):
 @login_required
 def resolve_apply(request):
     """Re-run the import from the stored files so every saved decision takes effect."""
-    if not is_staff_user(request.user):
+    if not _allowed(request):
         return render(request, "main/no_access.html", status=403)
     try:
         imp = services.import_components(request.user, allow_fewer_accounts=True)

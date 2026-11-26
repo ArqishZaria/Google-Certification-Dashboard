@@ -269,7 +269,22 @@ def spec_row(email, slug="google-cybersecurity", name="Google Cybersecurity", do
     return r
 
 
+def _with_enrolment_counts(program, specs, courses):
+    """Coursera's Program Activity shows '# Enrolled Courses'; mirror that for rows the test left at 0."""
+    n = {}
+    for r in list(specs) + list(courses):
+        n[r.get("Email")] = n.get(r.get("Email"), 0) + 1
+    out = []
+    for r in program:
+        r = dict(r)
+        if str(r.get("# Enrolled Courses") or "0") == "0" and n.get(r.get("Email")):
+            r["# Enrolled Courses"] = str(n[r["Email"]])
+        out.append(r)
+    return out
+
+
 def run(master, final, program, specs=(), courses=(), overrides=None):
+    program = _with_enrolment_counts(program, specs, courses)
     src = P.Sources(master_rows=master, final_sheets={"Southern": final}, coursera={"acctA": {"program": program, "spec": list(specs), "course": list(courses)}},
                     as_of=AS_OF, overrides=overrides or {})
     return P.build(src)

@@ -30,7 +30,7 @@ def ensure_regions():
     return out
 
 
-def programme_view(parts):
+def programme_view(parts, only=None):
     """Coursera's own programme counts (licences issued / joined / enrolled per licence programme) beside the Final-list
     seat counts. The Coursera columns do NOT depend on the Final list, so they reproduce Coursera's programme screen."""
     agg = {r["program_region"]: r for r in License.objects.filter(removed=False).values("program_region").annotate(
@@ -43,14 +43,14 @@ def programme_view(parts):
         s["started"] += bool(p["started"])
     rows = []
     for name in C.REGION_ORDER:
-        if name == "National":
+        if name == "National" or (only and name != only):
             continue
         a, s = agg.get(name, {}), seat.get(name, {})
         rows.append({"name": name, "issued": a.get("issued", 0), "joined": a.get("joined", 0), "enrolled": a.get("enrolled", 0),
                      "seats": s.get("seats", 0), "seat_joined": s.get("joined", 0), "seat_started": s.get("started", 0)})
     keys = ("issued", "joined", "enrolled", "seats", "seat_joined", "seat_started")
     total = {k: sum(r[k] for r in rows) for k in keys}
-    nat = agg.get("National", {})
+    nat = agg.get("National", {}) if not only else {}
     return {"rows": rows, "total": total, "national": {"issued": nat.get("issued", 0), "joined": nat.get("joined", 0), "enrolled": nat.get("enrolled", 0)} if nat else None}
 
 
@@ -211,7 +211,7 @@ def recompute_all():
     for l in License.objects.all():
         lic_by_p.setdefault(l.participant_id, []).append({
             "state": l.state, "removed": l.removed, "invited_at": l.invited_at, "joined_at": l.joined_at,
-            "last_activity_at": l.last_activity_at, "learning_hours": l.learning_hours})
+            "last_activity_at": l.last_activity_at, "learning_hours": l.learning_hours, "enrolled_courses": l.enrolled_courses})
     for s in SpecializationEnrollment.objects.select_related("specialization"):
         spec_by_p.setdefault(s.participant_id, []).append({
             "family": s.specialization.family, "category": s.specialization.category, "progress_pct": s.progress_pct,

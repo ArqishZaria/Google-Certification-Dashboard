@@ -57,7 +57,7 @@ def base_ctx(request, eff, **extra):
     imp = DataImport.objects.first()
     ctx = {"eff": eff, "scope_label": eff["label"], "imp": imp, "data_alerts": (imp.stats or {}).get("alerts", []) if imp else [],
            "as_of": imp.as_of if imp else None,
-           "can_import": is_staff_user(request.user), "is_national": eff["level"] == "national",
+           "can_import": is_staff_user(request.user) and eff["level"] == "national", "is_national": eff["level"] == "national",
            "query": request.GET.urlencode()}
     ctx.update(filter_context(request, eff))
     ctx.update(extra)
@@ -104,7 +104,7 @@ def dashboard(request, eff):
     nat = None
     prog = None
     outside = 0
-    if not request.GET.get("region") and not request.GET.get("programme"):
+    if eff["level"] == "national" and not request.GET.get("region") and not request.GET.get("programme"):
         outside = Participant.objects.filter(shortlisted=False).exclude(license_state="NONE").count()
     if gk == "region" and not request.GET.get("region") and not request.GET.get("programme"):
         # National Council staff are kept OUT of every regional figure and shown as their own block.
@@ -116,6 +116,9 @@ def dashboard(request, eff):
         regs = [r for r in regs if r["region"] != "National"]
         specs = [s for s in specs if s.get("region") != "National"]
         prog = services.programme_view(parts)
+    elif eff["level"] == "region" and getattr(request.user, "gcc_scope", None) is not None and request.user.gcc_scope.region_id:
+        # a regional user sees Coursera's counts for THEIR region's programme only
+        prog = services.programme_view(parts, only=request.user.gcc_scope.region.name)
     pay = M.dashboard_payload(parts, regs, specs, as_of, gk, order)
     heat = pay["heatmap"]
     heat_rows = list(zip(heat["groups"], heat["matrix"]))
@@ -285,9 +288,9 @@ UPLOAD_TYPES = [("all", "Everything - first time, or a full refresh (all 3 files
 
 @login_required
 def import_data(request):
-    if not is_staff_user(request.user):
-        return render(request, "main/no_access.html", status=403)
     eff = services.effective(request.user, {}) or {"label": "National", "level": "national", "q": Q(), "group_key": "region"}
+    if not is_staff_user(request.user) or eff["level"] != "national":
+        return render(request, "main/no_access.html", status=403)
     upload_type = request.POST.get("upload_type", "all") if request.method == "POST" else "all"
     if request.method == "POST":
         errors, warnings = [], []
@@ -337,7 +340,8 @@ def import_template(request, kind):
 @require_POST
 @login_required
 def recalculate(request):
-    if not is_staff_user(request.user):
+    eff = services.effective(request.user, {})
+    if not is_staff_user(request.user) or not eff or eff["level"] != "national":
         return render(request, "main/no_access.html", status=403)
     n = services.recompute_all()
     messages.success(request, f"Recalculated {n} participants with the current specialization categories.")

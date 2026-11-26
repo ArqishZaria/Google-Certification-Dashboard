@@ -1,4 +1,8 @@
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 
 from . import services
 from .models import (Dismissal, SeatChange, Area, CourseEnrollment, DataImport, DataIssue, IdentityOverride, License, LocalCouncil, Participant,
@@ -68,3 +72,46 @@ class SeatChangeAdmin(admin.ModelAdmin):
 @admin.register(Dismissal)
 class DismissalAdmin(admin.ModelAdmin):
     list_display = ("code", "ref", "created_at")
+
+
+class UserScopeForm(forms.ModelForm):
+    class Meta:
+        model = UserScope
+        fields = ("role", "region", "local_council", "area")
+
+    def clean(self):
+        d = super().clean()
+        role = d.get("role")
+        if role and role not in UserScope.NATIONAL_ROLES and not (d.get("region") or d.get("local_council") or d.get("area")):
+            raise ValidationError("Choose the Region (or Local council / Area) this user may see. Without one the user would see nothing.")
+        return d
+
+
+class UserScopeInline(admin.StackedInline):
+    """Shown on the Add user / Change user page: what this person may see on the dashboard."""
+    model = UserScope
+    form = UserScopeForm
+    fk_name = "user"
+    extra = 1
+    max_num = 1
+    verbose_name = "Dashboard access"
+    verbose_name_plural = "Dashboard access - choose the region this user may see (they will see nothing outside it)"
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserWithScopeAdmin(BaseUserAdmin):
+    inlines = [UserScopeInline]
+    list_display = ("username", "email", "is_staff", "dashboard_access")
+    list_select_related = ("gcc_scope",)
+
+    @admin.display(description="Dashboard access")
+    def dashboard_access(self, obj):
+        if obj.is_superuser:
+            return "National (superuser)"
+        s = getattr(obj, "gcc_scope", None)
+        if s is None:
+            return "none"
+        return f"{s.get_role_display()} - " + (str(s.area) if s.area_id else s.local_council.name if s.local_council_id else s.region.name if s.region_id else "National")

@@ -89,6 +89,10 @@ def derive_participant(licenses, specs, courses, as_of: date, inactivity_days=DE
     pc_family = primary["family"] if primary else None
     pc_completed_families = sorted({s["family"] for s in pcs if s["completed"]})
     pc_completed_at = _min([s.get("completed_at") for s in pcs if s["completed"]])
+    # STARTED = Coursera's own "Enrolled learners": at least one licence shows enrolled courses (or a certificate is completed).
+    # Only when the licence rows carry no enrolment count at all do we fall back to "any specialization / course row".
+    if any("enrolled_courses" in l for l in licenses):
+        started = any((l.get("enrolled_courses") or 0) > 0 for l in licenses) or pc_completed
 
     activity_ts = []
     for s in specs:
