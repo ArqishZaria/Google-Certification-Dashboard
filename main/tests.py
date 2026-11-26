@@ -414,3 +414,10 @@ class RegionUserTests(TestCase):
         r = self.client.post("/admin/auth/user/add/", post)
         self.assertContains(r, "Choose the Region")
         self.assertFalse(User.objects.filter(username="nowhere").exists())
+
+
+class ResolveHeadlineTests(ResolveFlowTests):
+    def test_headline_separates_number_changing_rows_from_information(self):
+        page = self.client.get("/dashboard/resolve/")
+        self.assertContains(page, "change the numbers")
+        self.assertContains(page, "never change a number")

@@ -103,7 +103,10 @@ def build_context(imp):
     history.sort(key=lambda h: h["when"], reverse=True)
     return {"n_confident": len(confident_pairs(seat_rows)), "seat_rows": seat_rows, "lic_rows": lic_rows, "groups": list(groups.values()), "history": history,
             "waiting": sum(1 for h in history if h["waiting"]), "regions": C.REGION_ORDER,
-            "open_total": len(seat_rows) + len(lic_rows) + len(other), "other_total": len(other), "imp": imp}
+            "open_total": len(seat_rows) + len(lic_rows) + len(other), "other_total": len(other), "imp": imp,
+            "affect_rows": len(seat_rows) + len(lic_rows),
+            "warn_total": sum(1 for r in other if r["issue"].severity != "INFO"),
+            "info_total": sum(1 for r in other if r["issue"].severity == "INFO")}
 
 
 def confident_pairs(seat_rows):

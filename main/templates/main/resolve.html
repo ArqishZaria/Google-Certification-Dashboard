@@ -13,7 +13,8 @@
 <h1>Resolve queries</h1>
 <div class="sub">Every case where the Final list and Coursera do not line up, in one place. Saved decisions are kept for every future import.</div>
 
-<div class="card sticky"><b>{{ open_total }}</b> open case(s):
+<div class="card"><b>{{ affect_rows }} row(s) change the numbers</b>: seats without a licence and licences without a seat. The same person often appears twice, once on each side.{% if n_confident %} {{ n_confident }} of them are matched pairs, so <b>one click clears {{ n_confident|add:n_confident }} rows</b>.{% endif %} {{ warn_total }} data warning(s) need a look; {{ info_total }} more are for information only and never change a number.</div>
+<div class="card sticky">Jump to:
  <a class="chip" href="#seats">Seats without a licence: {{ seat_rows|length }}</a>
  <a class="chip" href="#licences">Licences not on the Final list: {{ lic_rows|length }}</a>
  <a class="chip" href="#other">Other checks: {{ other_total }}</a>
